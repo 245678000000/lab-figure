@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lab Figure"
+  short_description: "Lab-style data figures from templates (ROC, KM, forest, box...)"
+  default_prompt: "Use $lab-figure to make a lab-style figure from this data."

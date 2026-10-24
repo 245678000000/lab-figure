@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# lab-figure entry point.
+#   labfig inspect <data.csv|xlsx> [--sheet S] [--header-row N]   column summary for template mapping
+#   labfig render  <figure.R>                                      run a figure script, list outputs
+#   labfig qa      <figure.pdf>                                    collision + min font-size audit
+#   labfig doctor                                                  check R, labstyle and Python env
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+REPO="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+PY="$REPO/.venv/bin/python"
+RSCRIPT="$(command -v Rscript || echo /Library/Frameworks/R.framework/Resources/bin/Rscript)"
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  inspect)
+    exec "$PY" -I "$SCRIPT_DIR/inspect_data.py" "$@"
+    ;;
+  render)
+    file="${1:?usage: labfig render <figure.R>}"
+    case "$file" in
+      *.R|*.r) exec "$RSCRIPT" "$SCRIPT_DIR/render.R" "$file" ;;
+      *.py) exec "$PY" "$file" ;;
+      *) echo "render: expected a .R or .py file" >&2; exit 2 ;;
+    esac
+    ;;
+  qa)
+    pdf="${1:?usage: labfig qa <figure.pdf>}"
+    status=0
+    echo "== font size (min 5 pt)"
+    "$PY" -I "$SCRIPT_DIR/qa/audit_pdf_text.py" --min-pt 5 "$pdf" || status=$?
+    echo "== collisions"
+    "$PY" -I "$SCRIPT_DIR/qa/audit_figure_collisions.py" "$pdf" \
+      --json-out "${pdf%.pdf}.collision-audit.json" || status=$?
+    exit $status
+    ;;
+  doctor)
+    echo "repo:    $REPO"
+    if [ -x "$RSCRIPT" ]; then
+      "$RSCRIPT" -e 'cat("R:      ", R.version.string, "\n"); cat("labstyle:", if (requireNamespace("labstyle", quietly = TRUE)) as.character(packageVersion("labstyle")) else "NOT INSTALLED", "\n")'
+    else
+      echo "R:       NOT FOUND (install with: brew install --cask r-app)"
+    fi
+    if [ -x "$PY" ]; then
+      "$PY" -I -c 'import pandas, pymupdf; print("python:  ok (pandas", pandas.__version__ + ", pymupdf", pymupdf.VersionBind + ")")'
+    else
+      echo "python:  NOT FOUND ($PY)"
+    fi
+    ;;
+  *)
+    sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'
+    exit 2
+    ;;
+esac
