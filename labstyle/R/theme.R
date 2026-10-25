@@ -18,7 +18,8 @@ theme_lab <- function(base_size = .lab_style$base_size, x_angle = 0,
       legend.position = legend
     )
   if (x_angle != 0) {
-    t <- t + theme(axis.text.x = element_text(angle = x_angle, hjust = 1, vjust = 1))
+    t <- t + theme(axis.text.x = element_text(angle = x_angle, hjust = 1,
+                                              vjust = if (x_angle == 90) 0.5 else 1))
   }
   if (boxed) {
     t <- t + theme(

@@ -7,9 +7,10 @@ Description: House plotting style (theme, palettes, size presets, export) and
     published analysis code.
 License: file LICENSE
 Encoding: UTF-8
-Depends: R (>= 4.1.0)
+Depends:
+    R (>= 4.1.0),
+    ggplot2 (>= 3.5.0)
 Imports:
-    ggplot2 (>= 3.5.0),
     patchwork,
     pROC,
     survival,

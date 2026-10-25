@@ -38,7 +38,7 @@ lab_cor_heatmap <- function(data, vars, vars_y = NULL, method = c("spearman", "p
     scale_fill_lab_diverging(name = paste(.title_case(method), "r")) +
     coord_fixed() +
     labs(x = NULL, y = NULL) +
-    theme_lab(x_angle = 45) +
+    theme_lab(x_angle = 90) +
     theme(axis.line = element_blank(), axis.ticks = element_blank())
   label_w <- 0.075 * max(nchar(c(vars, vy)))
   size <- c(label_w + 0.3 * length(vy) + 1.2, label_w + 0.3 * length(vars) + 0.3)

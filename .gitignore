@@ -11,3 +11,5 @@ figures/
 __pycache__/
 evals/fidelity/out/
 Rplots.pdf
+evals/baseline/
+evals/runs/

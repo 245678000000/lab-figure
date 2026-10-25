@@ -48,7 +48,11 @@ short script. Do not restyle templates or hand-write ggplot themes.
    p). Never state a statistic the template did not compute.
 6. **Only for the final export** (the user says it is final / for
    submission): `"$LABFIG" qa figures/<name>.pdf`. FIX BEFORE DELIVERY means
-   repair and re-run; REVIEW REQUIRED means look at each warning.
+   repair and re-run; REVIEW REQUIRED means look at each warning. The
+   collision audit measures rotated text by its upright bounding box, so
+   45° tick labels next to each other can be flagged as text-text overlaps
+   when the glyphs do not touch: look at the PNG before changing anything
+   for those findings.
 
 ## Rules
 

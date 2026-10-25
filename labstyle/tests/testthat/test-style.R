@@ -7,6 +7,10 @@ test_that("palettes and presets match the style spec", {
   expect_error(lab_colors("binary", 3), "has 2 colours")
 })
 
+test_that("library(labstyle) attaches ggplot2, so p + labs() works in scripts", {
+  expect_true("package:ggplot2" %in% search())
+})
+
 test_that("p-value formatting follows the original rules", {
   expect_equal(format_p_value(c(0.234, 0.0312, 0.00012, NA)),
                c("0.23", "0.031", "1.2e-04", NA))

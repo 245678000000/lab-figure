@@ -1,0 +1,56 @@
+{
+  "roc": {
+    "auc": 0.625,
+    "lower": 0.416505,
+    "upper": 0.833495,
+    "n_dc": 12,
+    "n_pd": 22
+  },
+  "km": {
+    "hr": 0.39049,
+    "lower": 0.175534,
+    "upper": 0.868678,
+    "p_cox": 0.021163,
+    "p_logrank": 0.017742,
+    "median_cutoff": 2.51
+  },
+  "forest": [
+    {
+      "term": "NLR_high",
+      "hr": 1.342114,
+      "lower": 0.779543,
+      "upper": 2.310673,
+      "p": 0.288458
+    },
+    {
+      "term": "`Blood albumin (g/dl)`",
+      "hr": 0.515671,
+      "lower": 0.318135,
+      "upper": 0.835861,
+      "p": 0.007198
+    },
+    {
+      "term": "SexMALE",
+      "hr": 0.693298,
+      "lower": 0.352501,
+      "upper": 1.363575,
+      "p": 0.288515
+    }
+  ],
+  "box": {
+    "p_wilcox": 0.245487,
+    "p_wilcox_approx": 0.241511
+  },
+  "rate_bar": {
+    "rate_low": 23.529412,
+    "rate_high": 47.058824,
+    "or": 2.888889,
+    "fisher_p": 0.281753
+  },
+  "heatmap": {
+    "n_pairs": 45,
+    "n_sig_005": 15,
+    "r_B_Plasma": 0.840657,
+    "r_CD4_Tregs": 0.876547
+  }
+}
