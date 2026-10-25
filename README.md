@@ -5,6 +5,7 @@
 | 目录 | 内容 |
 |---|---|
 | `labstyle/` | R 包：`theme_lab()`、调色板、`save_fig()` 和 9 个模板（ROC、KM、森林图、箱线图、小提琴图、比例柱状图、AUC 柱状图、相关性热图、饼图） |
+| `labstyle-py/` | Python 包 `labstyle_py`：同一套风格、`save_fig()` 和 ROC / 箱线图 / 比例柱状图模板，统计结果与 R 版一致（测试直接对照 R） |
 | `skill/lab-figure/` | 给 Claude Code / Codex 用的 skill，入口脚本 `scripts/labfig` |
 | `examples/` | 每个模板一个示例（用 HNSCC 数据），`style_sheet.R` 生成风格样张 |
 | `docs/style-spec.md` | 风格规范：每个数值来自导师代码的哪里 |
@@ -19,6 +20,7 @@ Rscript setup/install_r_packages.R        # 依赖包 + labstyle
 # Python 环境放在 iCloud 之外：~/Documents 开了 iCloud 同步时，放在项目里会被移到云端，导入要等几十秒
 uv venv --python 3.12 ~/.local/share/lab-figure/venv
 uv pip install --python ~/.local/share/lab-figure/venv/bin/python -r requirements.txt
+uv pip install --python ~/.local/share/lab-figure/venv/bin/python -e "labstyle-py[test]"
 ln -s ~/.local/share/lab-figure/venv .venv
 skill/lab-figure/scripts/labfig doctor    # 检查环境
 ```
@@ -36,6 +38,7 @@ ln -s ../../.agents/skills/lab-figure ~/.claude/skills/lab-figure
 
 ```bash
 Rscript -e 'testthat::test_local("labstyle")'   # 模板测试
+.venv/bin/python -m pytest labstyle-py/tests     # Python 版测试（与 R 对照）
 Rscript examples/style_sheet.R                   # 风格样张 -> docs/style-sheet.pdf
 .venv/bin/python -I examples/make_gallery.py     # 重画示例并更新 skill 图库缩略图
 skill/lab-figure/scripts/labfig inspect data.xlsx

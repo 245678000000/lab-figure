@@ -117,3 +117,25 @@ lab_pie(d, category = "cancer_type")            # counts rows
 lab_pie(summary_df, category = "type", count = "n")
 ```
 Stats: category, count. Size: pie.
+
+## Python (labstyle_py)
+
+Same arguments, house style, size presets and statistics as the R templates
+(tests compare them with R to 9 digits). Each returns a matplotlib Figure;
+`lab_stats(fig)` gives the statistics, `save_fig(fig, name)` writes PDF + PNG,
+and `ax=` draws into an existing panel. Only these three exist in Python.
+
+```python
+# ---- data ----
+import pandas as pd
+from labstyle_py import lab_box, lab_rate_bar, lab_roc, lab_stats, save_fig
+
+d = pd.read_excel("data/cohort.xlsx", sheet_name="Cohort10", header=1)  # two-row header
+
+# ---- plot ----
+fig = lab_roc(d, outcome="Response", predictor="B_cells", positive="R")
+fig = lab_box(d, x="Response", y="CD8_T_cells", levels=["NR", "R"], ylab="CD8 T cells (%)")
+fig = lab_rate_bar(d, group="B_group", outcome="DC", levels=["Low", "High"])
+save_fig(fig, "roc_bcells")
+print(lab_stats(fig))
+```

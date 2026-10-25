@@ -1,12 +1,12 @@
 # Lab Figure Preview
 
-Live preview for lab-figure R scripts in VS Code and Cursor: the script on the
+Live preview for lab-figure R and Python scripts in VS Code and Cursor: the script on the
 left, the figure on the right, redrawn after every edit — whether you type it or
 an agent (Claude Code, Codex, Cursor) writes the file.
 
 ## Use
 
-Open a figure script (`figures/*.R`, `examples/*.R`) and click the preview icon
+Open a figure script (`figures/*.R`, `figures/*.py`, `examples/…`) and click the preview icon
 in the editor title bar, or run **Lab Figure: Open Figure Preview**.
 
 - **Redraws** 300 ms after the last edit. The data section (everything above
@@ -23,7 +23,11 @@ in the editor title bar, or run **Lab Figure: Open Figure Preview**.
 ## Requirements
 
 - R with the `labstyle` package installed (`Rscript setup/install_r_packages.R`
-  in the lab-figure repo).
+  in the lab-figure repo) for `.R` scripts; `labstyle::serve()` is the worker.
+- For `.py` scripts: a Python with `labstyle_py` installed (the lab-figure venv
+  at `~/.local/share/lab-figure/venv` is found automatically); the worker is
+  `python -m labstyle_py.serve`. Data frames from the cached data section are
+  copied before each render, so in-place edits in the plot section don't pile up.
 - For Export and check: the lab-figure skill installed at
   `~/.agents/skills/lab-figure` (or set `labFigure.labfigPath`).
 
@@ -31,17 +35,18 @@ in the editor title bar, or run **Lab Figure: Open Figure Preview**.
 
 | Setting | Default | |
 |---|---|---|
-| `labFigure.rscriptPath` | search PATH and `/usr/local/bin`, `/opt/homebrew/bin`, the R framework | Rscript for the worker |
+| `labFigure.rscriptPath` | search PATH and `/usr/local/bin`, `/opt/homebrew/bin`, the R framework | Rscript for the R worker |
+| `labFigure.pythonPath` | `~/.local/share/lab-figure/venv/bin/python`, then `python3` | Python for the Python worker |
 | `labFigure.labfigPath` | `~/.agents/skills/lab-figure/scripts/labfig` | used by Export and check |
 | `labFigure.debounceMs` | 300 | wait after the last edit |
 | `labFigure.renderTimeoutSeconds` | 120 | longer renders restart the worker |
 
-The R worker's log is in the **Lab Figure** output channel.
+The workers' logs are in the **Lab Figure** output channel.
 
 ## Develop
 
 ```bash
 npm install
-npm test          # compiles and drives the real R worker
+npm test          # compiles and drives the real R and Python workers
 npm run package   # lab-figure-preview-<version>.vsix
 ```

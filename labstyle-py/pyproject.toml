@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "labstyle-py"
+version = "0.1.0"
+description = "Lab house plotting style and templates (Python port of the labstyle R package)"
+requires-python = ">=3.10"
+dependencies = [
+    "matplotlib>=3.8",
+    "numpy",
+    "pandas",
+    "scipy",
+    "scikit-learn",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+# src layout: the editable install is then a plain path .pth, which Pylance/Pyright can follow
+[tool.setuptools.packages.find]
+where = ["src"]

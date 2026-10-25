@@ -7,17 +7,67 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
-const { RWorker, findRscript, renderedFiles } = require("../out/worker.js");
+const { RWorker, PyWorker, findRscript, findPython, renderedFiles } = require("../out/worker.js");
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const example = (name) => path.join(repo, "examples", `${name}.R`);
 const read = (name) => readFileSync(example(name), "utf8");
 
 let worker;
+let py;
 before(() => {
   worker = new RWorker(findRscript(""), 60_000);
+  py = new PyWorker(findPython(""), 60_000);
 });
-after(() => worker.dispose());
+after(() => {
+  worker.dispose();
+  py.dispose();
+});
+
+const pyExample = (name) => path.join(repo, "examples", "py", `${name}.py`);
+const readPy = (name) => readFileSync(pyExample(name), "utf8");
+
+test("python: renders a labstyle_py script, then from the cache", async () => {
+  const first = await py.render(pyExample("roc"), readPy("roc"), repo);
+  assert.equal(first.ok, true, first.error);
+  assert.equal(first.cached, false);
+  assert.deepEqual([first.figures[0].width, first.figures[0].height], [2.7, 2.2]);
+  assert.match(first.figures[0].svg, /<svg[\s\S]*AUC = 0\.74/);
+  assert.equal(first.figures[0].stats[0].n_pos, 6);
+  const plotEdit = readPy("roc").replace('positive="R")', 'positive="R", show_n=False)');
+  const second = await py.render(pyExample("roc"), plotEdit, repo, "wide");
+  assert.equal(second.ok, true, second.error);
+  assert.equal(second.cached, true);
+  assert.equal(second.figures[0].width, 4.6);
+  assert.doesNotMatch(second.figures[0].svg, /n: R 6/);
+});
+
+test("python: an error reports its script line", async () => {
+  const code = readPy("box").replace('y="B_cells"', 'y="Nope"');
+  const r = await py.render(pyExample("box"), code, repo);
+  assert.equal(r.ok, false);
+  assert.equal(r.section, "plot");
+  assert.match(r.error, /column 'Nope' not found/);
+  assert.equal(r.line, code.split("\n").findIndex((l) => l.includes('"Nope"')) + 1);
+});
+
+test("python: in-place edits in the plot section do not leak into the cache", async () => {
+  const code = [
+    "import pandas as pd",
+    "from labstyle_py import lab_box",
+    'd = pd.DataFrame({"g": ["a", "a", "b", "b"], "v": [1.0, 2.0, 3.0, 4.0]})',
+    "# ---- plot ----",
+    'd.loc[0, "v"] += 100',
+    'print("first value", d.loc[0, "v"])',
+    'fig = lab_box(d, "g", "v")',
+  ].join("\n");
+  const file = path.join(repo, "unsaved_copy_test.py");
+  const r1 = await py.render(file, code, repo);
+  const r2 = await py.render(file, code, repo);
+  assert.equal(r2.cached, true);
+  assert.match(r1.output, /first value 101\.0/);
+  assert.match(r2.output, /first value 101\.0/);
+});
 
 test("renders a template script to SVG with its stats", async () => {
   const r = await worker.render(example("roc"), read("roc"), repo);

@@ -48,7 +48,7 @@
       error.replaceChildren();
       const where = { parse: "Syntax error", data: "Error in the data section",
                       plot: "Error in the plot section", draw: "Error while drawing",
-                      worker: "R worker problem" }[r.section] || "Error";
+                      worker: "Preview worker problem" }[r.section] || "Error";
       error.append(el("strong", {}, where));
       if (r.line) {
         const link = el("a", { href: "#" }, ` (line ${r.line})`);

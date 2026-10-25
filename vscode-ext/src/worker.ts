@@ -52,6 +52,13 @@ export function findRscript(configured: string): string {
   return RSCRIPT_LOCATIONS.find((p) => fs.existsSync(p)) ?? "Rscript";
 }
 
+// The lab-figure Python env (outside iCloud, see the repo README), else PATH.
+export function findPython(configured: string): string {
+  if (configured) return configured;
+  const venv = path.join(os.homedir(), ".local/share/lab-figure/venv/bin/python");
+  return fs.existsSync(venv) ? venv : "python3";
+}
+
 export function findLabfig(configured: string): string | undefined {
   if (configured) return configured;
   const home = os.homedir();
@@ -70,21 +77,23 @@ export function renderedFiles(output: string): string[] {
   return lines.slice(ok + 1).filter((l) => l.startsWith("  ")).map((l) => l.trim());
 }
 
-export class RWorker extends EventEmitter {
+// A preview worker process: labstyle::serve() in R or labstyle_py.serve in
+// Python, both speaking the same protocol.
+export class Worker extends EventEmitter {
   private proc?: ChildProcess;
   private buffer = "";
   private nextId = 1;
   private pending = new Map<number, Pending>();
   private starting?: Promise<void>;
 
-  constructor(private rscript: string, private timeoutMs = 120_000) {
+  constructor(private command: string, private args: string[], private timeoutMs = 120_000) {
     super();
   }
 
   private start(): Promise<void> {
     if (this.starting) return this.starting;
     this.starting = new Promise((resolve, reject) => {
-      const proc = spawn(this.rscript, ["-e", "labstyle::serve()"], { stdio: ["pipe", "pipe", "pipe"] });
+      const proc = spawn(this.command, this.args, { stdio: ["pipe", "pipe", "pipe"] });
       this.proc = proc;
       this.buffer = "";
       let ready = false;
@@ -119,13 +128,13 @@ export class RWorker extends EventEmitter {
       proc.stderr!.on("data", (chunk: string) => this.emit("log", chunk.trimEnd()));
       // a restarted worker's late events must not touch its replacement
       proc.on("error", (err) => {
-        if (this.proc === proc) this.cleanup(new Error(`could not start ${this.rscript}: ${err.message}`));
+        if (this.proc === proc) this.cleanup(new Error(`could not start ${this.command}: ${err.message}`));
         if (!ready) reject(err);
       });
       proc.on("exit", (code, signal) => {
         this.emit("log", `worker exited (${signal ?? code})`);
-        if (this.proc === proc) this.cleanup(new Error(`R worker exited (${signal ?? code})`));
-        if (!ready) reject(new Error(`R worker exited before it was ready (${signal ?? code})`));
+        if (this.proc === proc) this.cleanup(new Error(`preview worker exited (${signal ?? code})`));
+        if (!ready) reject(new Error(`preview worker exited before it was ready (${signal ?? code})`));
       });
     });
     return this.starting;
@@ -144,12 +153,12 @@ export class RWorker extends EventEmitter {
   private async request(msg: Record<string, unknown>): Promise<RenderResult> {
     await this.start();
     const proc = this.proc;
-    if (!proc?.stdin) throw new Error("R worker is not running");
+    if (!proc?.stdin) throw new Error("preview worker is not running");
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`no answer after ${this.timeoutMs / 1000} s; the R worker was restarted`));
+        reject(new Error(`no answer after ${this.timeoutMs / 1000} s; the preview worker was restarted`));
         this.restart();
       }, this.timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
@@ -167,12 +176,24 @@ export class RWorker extends EventEmitter {
 
   restart(): void {
     const proc = this.proc;
-    this.cleanup(new Error("R worker restarted"));
+    this.cleanup(new Error("preview worker restarted"));
     proc?.kill();
   }
 
   dispose(): void {
     this.restart();
     this.removeAllListeners();
+  }
+}
+
+export class RWorker extends Worker {
+  constructor(rscript: string, timeoutMs?: number) {
+    super(rscript, ["-e", "labstyle::serve()"], timeoutMs);
+  }
+}
+
+export class PyWorker extends Worker {
+  constructor(python: string, timeoutMs?: number) {
+    super(python, ["-u", "-m", "labstyle_py.serve"], timeoutMs);
   }
 }

@@ -76,7 +76,11 @@ short script. Do not restyle templates or hand-write ggplot themes.
   then `save_fig(p, name, size = "single")`. Say that it is not a template.
 - Column names with spaces or symbols are passed as plain strings; keep them
   when reading (`readxl` does; for csv use `check.names = FALSE`).
-- Python figures: not available yet; tell the user and use R.
+- Python: `labstyle_py` has `lab_roc`, `lab_box` and `lab_rate_bar` with the
+  same arguments, house style and statistics as the R templates (see the
+  catalog's Python section). Use it when the user works in Python; for any
+  other template, say it exists only in R and offer R. Same two-section
+  layout in `figures/<name>.py`, render with `"$LABFIG" render figures/<name>.py`.
 
 ## Setup check
 

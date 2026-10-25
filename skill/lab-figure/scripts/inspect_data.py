@@ -96,6 +96,7 @@ def print_table(name: str, df: pd.DataFrame, header_row: int, path: Path, max_le
         print(f"NOTE: row {header_row + 1} holds the column names (row 1 is group titles).")
         if path.suffix.lower().startswith(".xls"):
             print(f'      R: readxl::read_excel("{path.name}", sheet = "{name}", skip = {header_row})')
+            print(f'      Python: pd.read_excel("{path.name}", sheet_name="{name}", header={header_row})')
     odd = [c for c in cols if re.search(r"[^A-Za-z0-9_.]", c)]
     if odd:
         print(f"NOTE: {len(odd)} column names contain spaces/symbols; pass them to lab_* as strings, "

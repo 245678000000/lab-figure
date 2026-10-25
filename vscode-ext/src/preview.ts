@@ -5,7 +5,15 @@ import { execFile } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
-import { RWorker, Size, findLabfig, renderedFiles } from "./worker";
+import { Size, Worker, findLabfig, renderedFiles } from "./worker";
+
+export const PREVIEW_LANGUAGES = ["r", "python"];
+
+// Only figure scripts are followed when the active editor changes, so opening
+// an ordinary Python module does not replace the preview with an error.
+function looksLikeFigureScript(doc: vscode.TextDocument): boolean {
+  return PREVIEW_LANGUAGES.includes(doc.languageId) && /labstyle|#\s*-+\s*plot\s*-+/.test(doc.getText());
+}
 
 export class PreviewPanel {
   static current: PreviewPanel | undefined;
@@ -20,7 +28,7 @@ export class PreviewPanel {
 
   static show(
     context: vscode.ExtensionContext,
-    getWorker: () => RWorker,
+    getWorker: (languageId: string) => Worker,
     diagnostics: vscode.DiagnosticCollection,
     log: vscode.OutputChannel,
     doc: vscode.TextDocument,
@@ -43,7 +51,7 @@ export class PreviewPanel {
   private constructor(
     private panel: vscode.WebviewPanel,
     context: vscode.ExtensionContext,
-    private getWorker: () => RWorker,
+    private getWorker: (languageId: string) => Worker,
     private diagnostics: vscode.DiagnosticCollection,
     private log: vscode.OutputChannel,
     doc: vscode.TextDocument,
@@ -60,7 +68,7 @@ export class PreviewPanel {
       }),
       vscode.window.onDidChangeActiveTextEditor((editor) => {
         const d = editor?.document;
-        if (d && d.languageId === "r" && d !== this.doc) this.track(d);
+        if (d && d !== this.doc && looksLikeFigureScript(d)) this.track(d);
       }),
     );
     this.track(doc);
@@ -108,7 +116,7 @@ export class PreviewPanel {
     const doc = this.doc;
     try {
       const code = doc.isClosed ? fs.readFileSync(doc.fileName, "utf8") : doc.getText();
-      const result = await this.getWorker().render(doc.fileName, code, this.cwd(), this.size);
+      const result = await this.getWorker(doc.languageId).render(doc.fileName, code, this.cwd(), this.size);
       this.showDiagnostic(doc, result.ok ? undefined : result.line, result.error);
       this.post({ type: "result", result });
     } catch (err) {
@@ -145,7 +153,7 @@ export class PreviewPanel {
         this.refresh();
         break;
       case "clearCache":
-        await this.getWorker().reset().catch(() => undefined);
+        await this.getWorker(this.doc.languageId).reset().catch(() => undefined);
         this.refresh();
         break;
       case "export":

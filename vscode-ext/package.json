@@ -1,8 +1,8 @@
 {
   "name": "lab-figure-preview",
   "displayName": "Lab Figure Preview",
-  "description": "Live preview for lab-figure R scripts: edit the code on the left, the figure redraws on the right.",
-  "version": "0.1.0",
+  "description": "Live preview for lab-figure R and Python scripts: edit the code on the left, the figure redraws on the right.",
+  "version": "0.2.0",
   "publisher": "lab-figure",
   "license": "SEE LICENSE IN LICENSE.md",
   "private": true,
@@ -14,7 +14,8 @@
   ],
   "main": "./out/extension.js",
   "activationEvents": [
-    "onLanguage:r"
+    "onLanguage:r",
+    "onLanguage:python"
   ],
   "contributes": {
     "commands": [
@@ -39,7 +40,7 @@
       "editor/title": [
         {
           "command": "labFigure.openPreview",
-          "when": "resourceLangId == r",
+          "when": "resourceLangId == r || resourceLangId == python && resourcePath =~ /(figure|plot|examples)/i",
           "group": "navigation"
         }
       ]
@@ -51,6 +52,11 @@
           "type": "string",
           "default": "",
           "description": "Rscript used for the preview worker. Empty: PATH, then the usual macOS install locations."
+        },
+        "labFigure.pythonPath": {
+          "type": "string",
+          "default": "",
+          "description": "Python with labstyle_py installed, used for .py figure scripts. Empty: ~/.local/share/lab-figure/venv/bin/python, then python3 on PATH."
         },
         "labFigure.labfigPath": {
           "type": "string",

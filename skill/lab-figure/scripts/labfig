@@ -22,7 +22,7 @@ case "$cmd" in
     file="${1:?usage: labfig render <figure.R>}"
     case "$file" in
       *.R|*.r) exec "$RSCRIPT" "$SCRIPT_DIR/render.R" "$file" ;;
-      *.py) exec "$PY" "$file" ;;
+      *.py) exec "$PY" "$SCRIPT_DIR/render.py" "$file" ;;
       *) echo "render: expected a .R or .py file" >&2; exit 2 ;;
     esac
     ;;
