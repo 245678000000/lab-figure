@@ -17,9 +17,10 @@ Imports:
     ragg,
     grDevices,
     grid,
+    jsonlite,
     stats,
+    svglite,
     utils
 Suggests:
-    svglite,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3

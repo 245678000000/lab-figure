@@ -6,6 +6,11 @@
 save_fig <- function(p, name, size = NULL, dir = "figures",
                      formats = c("pdf", "png"), dpi = .lab_style$dpi, data = NULL) {
   wh <- .resolve_size(size %||% attr(p, "lab_size") %||% "single")
+  if (isTRUE(.preview$active)) {
+    # live preview (serve()): hand the plot over instead of writing files
+    .preview$figures[[length(.preview$figures) + 1]] <- list(plot = p, name = name, size = wh)
+    return(invisible(character()))
+  }
   dir.create(dir, recursive = TRUE, showWarnings = FALSE)
   base <- file.path(dir, sub("\\.(pdf|png|svg)$", "", name))
   paths <- character()

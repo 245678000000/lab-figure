@@ -1,0 +1,84 @@
+{
+  "name": "lab-figure-preview",
+  "displayName": "Lab Figure Preview",
+  "description": "Live preview for lab-figure R scripts: edit the code on the left, the figure redraws on the right.",
+  "version": "0.1.0",
+  "publisher": "lab-figure",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Visualization"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:r"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "labFigure.openPreview",
+        "title": "Open Figure Preview",
+        "category": "Lab Figure",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "labFigure.exportAndCheck",
+        "title": "Export and Check",
+        "category": "Lab Figure"
+      },
+      {
+        "command": "labFigure.restartWorker",
+        "title": "Restart R Worker",
+        "category": "Lab Figure"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "labFigure.openPreview",
+          "when": "resourceLangId == r",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Lab Figure",
+      "properties": {
+        "labFigure.rscriptPath": {
+          "type": "string",
+          "default": "",
+          "description": "Rscript used for the preview worker. Empty: PATH, then the usual macOS install locations."
+        },
+        "labFigure.labfigPath": {
+          "type": "string",
+          "default": "",
+          "description": "labfig script used by Export and Check. Empty: ~/.agents/skills/lab-figure/scripts/labfig, then ~/.claude/skills/lab-figure/scripts/labfig."
+        },
+        "labFigure.debounceMs": {
+          "type": "number",
+          "default": 300,
+          "description": "Wait this long after the last edit before redrawing."
+        },
+        "labFigure.renderTimeoutSeconds": {
+          "type": "number",
+          "default": 120,
+          "description": "A render taking longer than this restarts the R worker."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "test": "npm run compile && node --test \"test/*.test.mjs\"",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "~1.90.0",
+    "@vscode/vsce": "^3.2.0",
+    "typescript": "^5.6.0"
+  }
+}

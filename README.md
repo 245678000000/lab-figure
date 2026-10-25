@@ -9,6 +9,7 @@
 | `examples/` | 每个模板一个示例（用 HNSCC 数据），`style_sheet.R` 生成风格样张 |
 | `docs/style-spec.md` | 风格规范：每个数值来自导师代码的哪里 |
 | `evals/` | 对比评测用的数据和记录 |
+| `vscode-ext/` | VS Code / Cursor 插件：左边改代码，右边实时出图（R 端是 `labstyle::serve()`），见其 README |
 
 ## 安装
 
