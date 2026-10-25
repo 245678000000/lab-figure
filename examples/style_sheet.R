@@ -17,12 +17,13 @@ build <- function() {
   plots
 }
 
+# The forest plot needs about 6.4 in for its text columns, so it spans two columns.
 page <- function(plots, title) {
   wrap_plots(
-    plots$roc, wrap_elements(full = plots$km), plots$box,
-    plots$rate_bar, plots$violin, plots$auc_bar,
-    wrap_elements(full = plots$forest), plots$cor_heatmap, plots$pie,
-    ncol = 3, widths = c(1, 1, 1)
+    A = plots$roc, B = wrap_elements(full = plots$km), C = plots$box,
+    D = plots$rate_bar, E = plots$violin, F = plots$auc_bar,
+    G = wrap_elements(full = plots$forest), H = plots$pie, I = plots$cor_heatmap,
+    design = "ABC\nDEF\nGGH\nI##"
   ) + plot_annotation(title = title, tag_levels = "a")
 }
 
@@ -32,7 +33,7 @@ options(labstyle.boxed = TRUE)
 boxed <- build()
 options(labstyle.boxed = FALSE)
 
-w <- 15; h <- 13
+w <- 15; h <- 17
 grDevices::pdf("docs/style-sheet.pdf", width = w, height = h, useDingbats = FALSE)
 print(page(open_axes, "A. Open axes (default: theme_lab())"))
 print(page(boxed, "B. Boxed panels (theme_lab(boxed = TRUE), the theme_bw look)"))

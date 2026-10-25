@@ -39,6 +39,26 @@
   as.integer(as.character(x) == as.character(positive))
 }
 
+# Display names of the two classes as c(negative, positive), matching .as_binary().
+.binary_labels <- function(x, positive = NULL) {
+  if (is.logical(x)) return(c("FALSE", "TRUE"))
+  vals <- sort(unique(stats::na.omit(x)))
+  if (is.numeric(x) && is.null(positive)) return(as.character(vals))
+  if (is.null(positive)) return(levels(droplevels(x)))
+  c(setdiff(as.character(vals), as.character(positive))[1], as.character(positive))
+}
+
+# "A (n = 12)" labels for group axes and legends.
+.n_labels <- function(groups, counts, sep = " ") {
+  paste0(groups, sep, "(n = ", counts, ")")
+}
+
+# x axis labelled with group sizes: two lines when upright, one line when rotated.
+.x_scale_n <- function(x, x_angle) {
+  scale_x_discrete(labels = .n_labels(levels(x), as.vector(table(x)),
+                                      sep = if (x_angle == 0) "\n" else " "))
+}
+
 .as_group <- function(x, levels = NULL) {
   if (!is.null(levels)) return(factor(x, levels = levels))
   if (is.factor(x)) return(droplevels(x))

@@ -3,14 +3,18 @@
 #'
 #' `comparisons`: NULL (the single pair when there are 2 groups), "all",
 #' "none", or a list of c("A", "B") pairs. `percent = TRUE` multiplies y by 100.
+#' `show_n` puts each group's size in its axis label. `x_angle` defaults to
+#' upright for short group names and 45 degrees for long ones.
 lab_box <- function(data, x, y, levels = NULL, comparisons = NULL, test = c("wilcox", "t"),
-                    xlab = NULL, ylab = NULL, x_angle = 45, percent = FALSE, ylim = NULL) {
+                    xlab = NULL, ylab = NULL, x_angle = NULL, percent = FALSE, ylim = NULL,
+                    show_n = TRUE) {
   test <- match.arg(test)
   d <- stats::na.omit(data.frame(x = .as_group(.col(data, x), levels),
                                  y = as.numeric(.col(data, y))))
   d$x <- droplevels(d$x)
   if (percent) d$y <- d$y * 100
   lv <- levels(d$x)
+  x_angle <- x_angle %||% if (max(nchar(lv)) <= 6) 0 else 45
   cols <- .palette_for(length(lv))
   tests <- .pair_tests(d, .resolve_comparisons(comparisons, lv), test)
 
@@ -28,7 +32,10 @@ lab_box <- function(data, x, y, levels = NULL, comparisons = NULL, test = c("wil
     labs(x = xlab, y = ylab %||% y) +
     theme_lab(x_angle = x_angle, legend = "none") +
     .bracket_layers(tests, lv, y0, step, .lab_style$text$small)
+  if (show_n) p <- p + .x_scale_n(d$x, x_angle)
   if (!is.null(ylim)) p <- p + coord_cartesian(ylim = ylim, clip = "off")
-  size <- if (length(lv) <= 2) "narrow" else c(0.6 + 0.55 * length(lv), 3.3)
+  # "(n = 28)" labels need more room per group than the original 1.5 in panel
+  size <- if (show_n) c(0.75 + 0.6 * length(lv), 3.3)
+          else if (length(lv) <= 2) "narrow" else c(0.6 + 0.55 * length(lv), 3.3)
   .set_meta(p, size, tests)
 }

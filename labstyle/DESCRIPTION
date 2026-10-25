@@ -1,6 +1,6 @@
 Package: labstyle
 Title: Lab Figure Style and Plot Templates
-Version: 0.1.0
+Version: 0.2.0
 Description: House plotting style (theme, palettes, size presets, export) and
     parameterised plot templates (ROC, Kaplan-Meier, forest, box, violin,
     rate bar, AUC bar, correlation heatmap, pie) distilled from the lab's

@@ -2,7 +2,7 @@
 #' plot_violin in Neutrophil_EGR1/code/Figure2.Rmd. Arguments as in lab_box().
 lab_violin <- function(data, x, y, levels = NULL, comparisons = NULL, test = c("wilcox", "t"),
                        xlab = NULL, ylab = NULL, x_angle = 0, percent = FALSE,
-                       points = TRUE, trim = TRUE) {
+                       points = TRUE, trim = TRUE, show_n = TRUE) {
   test <- match.arg(test)
   d <- stats::na.omit(data.frame(x = .as_group(.col(data, x), levels),
                                  y = as.numeric(.col(data, y))))
@@ -24,5 +24,6 @@ lab_violin <- function(data, x, y, levels = NULL, comparisons = NULL, test = c("
     labs(x = xlab, y = ylab %||% y) +
     theme_lab(x_angle = x_angle, legend = "none") +
     .bracket_layers(tests, lv, max(d$y) + step * 0.6, step, .lab_style$text$small)
+  if (show_n) p <- p + .x_scale_n(d$x, x_angle)
   .set_meta(p, "violin", tests)
 }

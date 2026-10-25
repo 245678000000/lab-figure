@@ -24,11 +24,12 @@ lab_cox_table <- function(data, time, event, terms, event_value = NULL, labels =
 
 #' Forest plot laid out as  estimate | label | interval | p,  as in
 #' save_forest_plot (forestplot package) in melanoma_irAE/code/utils.R,
-#' rebuilt in ggplot2 + patchwork.
+#' rebuilt in ggplot2 + patchwork. `ci_text` prints "HR (95% CI)" in the
+#' estimate column; FALSE gives the original 3-decimal estimate only.
 lab_forest <- function(data, label = "term", estimate = "estimate", lower = "lower",
                        upper = "upper", p = "p", est_name = "HR", label_name = "Variable",
                        xlab = "Hazard ratio", ref = 1, xlim = NULL, xbreaks = NULL,
-                       log = FALSE) {
+                       log = FALSE, ci_text = TRUE) {
   d <- data.frame(label = as.character(.col(data, label)),
                   est = as.numeric(.col(data, estimate)),
                   lower = as.numeric(.col(data, lower)),
@@ -68,15 +69,24 @@ lab_forest <- function(data, label = "term", estimate = "estimate", lower = "low
     forest <- forest + scale_x_continuous(breaks = xbreaks)
   }
 
+  est_vals <- if (ci_text) sprintf("%.2f (%.2f-%.2f)", d$est, d$lower, d$upper) else sprintf("%.3f", d$est)
+  est_head <- if (ci_text) paste0(est_name, " (95% CI)") else est_name
+  p_vals <- format_p_value(d$p)
+  # Text columns get fixed widths from their longest entry, so they never
+  # overlap when the figure is narrower; only the interval panel stretches.
+  inch_per_char <- fs * .pt / 72 * 0.6
+  col_in <- function(values, header) max(nchar(c(values, header)), na.rm = TRUE) * inch_per_char + 0.15
+  text_in <- c(col_in(est_vals, est_head), col_in(d$label, label_name), col_in(p_vals, "P-value"))
   out <- patchwork::wrap_plots(
-    text_col(sprintf("%.3f", d$est), est_name, 0),
+    text_col(est_vals, est_head, 0),
     text_col(d$label, label_name, 0),
     forest,
-    text_col(format_p_value(d$p), "P-value", 1),
-    nrow = 1, widths = c(0.7, 2, 1.6, 0.8)
+    text_col(p_vals, "P-value", 1),
+    nrow = 1,
+    widths = grid::unit(c(text_in[1:2], 1, text_in[3]), c("in", "in", "null", "in"))
   )
   stats <- data.frame(label = d$label, estimate = d$est, lower = d$lower,
                       upper = d$upper, p = d$p)
   # rows 0.85 cm apart as in the original (lineheight = unit(0.85, "cm"))
-  .set_meta(out, c(5.5, 0.335 * (n + 1) + 0.9), stats)
+  .set_meta(out, c(sum(text_in) + 1.9, 0.335 * (n + 1) + 0.9), stats)
 }

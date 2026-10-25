@@ -53,9 +53,24 @@
 
 - p 值格式（`format_p_value`）：p ≥ 0.05 保留 2 位小数；0.0095 ≤ p < 0.05 保留 3 位小数；更小的用科学计数法，2 位有效数字。
 - 星号（`p_to_symbol`）：`***` < 0.001，`**` < 0.01，`*` < 0.05，否则 `ns`。
-- 两组比较默认用 Wilcoxon 秩和检验，用括线标注 `p = …`。
-- ROC 标注 `AUC = 0.xx (下限,上限)`，置信区间用 DeLong 法（`pROC::ci.auc`）。
-- KM 标注 `HR = x (下限-上限)` 和 `p = 0.xxx`，来自以 Low 为参照的单因素 Cox 模型。
+- 两组比较默认用 Wilcoxon 秩和检验（R 默认：小样本且无并列值时为精确检验），用括线标注 `p = …`。
+- ROC 标注三行：`AUC = 0.xx` / `95% CI 下限-上限` / `n: 阳性类 n, 阴性类 n`，置信区间用 DeLong 法（`pROC::ci.auc`）。
+- KM 标注 `HR = x` / `(下限-上限)` / `p = …`，来自以第一组为参照的单因素 Cox 模型。
+- 比例柱状图：OR 算法同原代码，另加 Wald 95% CI 和 Fisher 精确检验 p。
+- 相关热图：星号用 Benjamini-Hochberg 校正后的 p（与 HNSCC_Bcells 的热图一致），每对变量只算一次。
+
+## 相对导师原代码的增补（2026-10-25）
+
+对比评测里旧方式自己加上、确实更好的细节，统一加进了模板，都可以关掉：
+
+| 增补 | 模板 | 关闭参数 |
+|---|---|---|
+| 各组样本量 n | ROC 标注、KM 图例、箱线图 / 小提琴图 x 轴、比例柱状图柱顶 | `show_n = FALSE` / `show_counts = FALSE` |
+| 森林图印出 95% CI 文字 | `lab_forest` | `ci_text = FALSE` |
+| OR 的 95% CI 和 Fisher p | `lab_rate_bar` | `show_ci = FALSE`、`show_p = FALSE` |
+| BH 校正、只画下三角、星号说明 | `lab_cor_heatmap` | `p_adjust = "none"`、`triangle = "full"`、`note = FALSE` |
+
+为放下这些内容，尺寸也相应调整：箱线图显示 n 时每组 0.6 英寸（两组约 1.95 英寸），森林图带 CI 文字时宽 6.5 英寸。
 
 ## 导出
 

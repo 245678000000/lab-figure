@@ -9,7 +9,8 @@
 lab_km <- function(data, time, event, group = NULL, score = NULL, cutoff = "median",
                    levels = NULL, labels = NULL, event_value = NULL,
                    xlab = "Time (months)", ylab = "Survival probability",
-                   xmax = NULL, break_by = NULL, risk_table = TRUE, show_stats = TRUE) {
+                   xmax = NULL, break_by = NULL, risk_table = TRUE, show_stats = TRUE,
+                   show_n = TRUE) {
   tt <- as.numeric(.col(data, time))
   ev <- .as_binary(.col(data, event), event_value, event)
   if (!is.null(group)) {
@@ -27,6 +28,8 @@ lab_km <- function(data, time, event, group = NULL, score = NULL, cutoff = "medi
   if (!is.null(labels)) levels(df$group) <- labels
   lv <- levels(df$group)
   cols <- .palette_for(length(lv))
+  group_n <- as.vector(table(df$group))
+  legend_labels <- if (show_n) .n_labels(lv, group_n) else lv
 
   fit <- survival::survfit(survival::Surv(time, event) ~ group, data = df)
   strata <- factor(sub("^group=", "", rep(names(fit$strata), fit$strata)), levels = lv)
@@ -43,7 +46,7 @@ lab_km <- function(data, time, event, group = NULL, score = NULL, cutoff = "medi
   p <- ggplot(cd, aes(x = time, y = surv, colour = group)) +
     geom_step(linewidth = 1) +
     geom_point(data = cd[cd$n.censor > 0, ], shape = 3, size = 2, show.legend = FALSE) +
-    scale_colour_manual(values = cols, name = NULL) +
+    scale_colour_manual(values = cols, name = NULL, labels = legend_labels) +
     scale_x_continuous(breaks = breaks) +
     coord_cartesian(xlim = xlim, ylim = c(0, 1)) +
     labs(x = xlab, y = ylab) +
@@ -61,13 +64,15 @@ lab_km <- function(data, time, event, group = NULL, score = NULL, cutoff = "medi
     cs <- summary(survival::coxph(survival::Surv(time, event) ~ group, data = df))
     stats <- data.frame(hr = cs$conf.int[1, 1], lower = cs$conf.int[1, 3],
                         upper = cs$conf.int[1, 4], p = cs$coefficients[1, 5],
-                        test = "cox", reference = lv[1], cutoff = threshold, n = nrow(df))
+                        test = "cox", reference = lv[1], cutoff = threshold, n = nrow(df),
+                        n_by_group = paste(lv, group_n, sep = ": ", collapse = "; "))
     label <- sprintf("HR = %.2f\n(%.2f-%.2f)\np = %s",
                      stats$hr, stats$lower, stats$upper, format_p_value(stats$p))
   } else {
     sd <- survival::survdiff(survival::Surv(time, event) ~ group, data = df)
     stats <- data.frame(p = stats::pchisq(sd$chisq, length(sd$n) - 1, lower.tail = FALSE),
-                        test = "logrank", cutoff = threshold, n = nrow(df))
+                        test = "logrank", cutoff = threshold, n = nrow(df),
+                        n_by_group = paste(lv, group_n, sep = ": ", collapse = "; "))
     label <- paste0("Log-rank\np = ", format_p_value(stats$p))
   }
   if (show_stats) {

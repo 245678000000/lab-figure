@@ -3,10 +3,13 @@
 #'
 #' One predictor: black step curve with the AUC label. Several predictors:
 #' one coloured curve each, AUCs in the legend. `direction = "<"` means higher
-#' predictor values indicate the positive class.
+#' predictor values indicate the positive class. `show_n` adds the class sizes
+#' under the AUC (single curve).
 lab_roc <- function(data, outcome, predictor, positive = NULL, direction = "<",
-                    labels = NULL, youden = FALSE) {
-  y <- .as_binary(.col(data, outcome), positive, outcome)
+                    labels = NULL, youden = FALSE, show_n = TRUE) {
+  y_raw <- .col(data, outcome)
+  y <- .as_binary(y_raw, positive, outcome)
+  classes <- .binary_labels(y_raw, positive)
   labels <- labels %||% predictor
   curves <- lapply(predictor, function(pr) {
     x <- as.numeric(.col(data, pr))
@@ -16,14 +19,17 @@ lab_roc <- function(data, outcome, predictor, positive = NULL, direction = "<",
     ci <- as.numeric(pROC::ci.auc(roc))
     df <- data.frame(fpr = 1 - roc$specificities, sensitivity = roc$sensitivities)
     df <- unique(df[order(df$fpr, df$sensitivity), ])
-    list(roc = roc, df = df, auc = ci[2], lower = ci[1], upper = ci[3], n = sum(ok))
+    list(roc = roc, df = df, auc = ci[2], lower = ci[1], upper = ci[3], n = sum(ok),
+         n_pos = sum(y[ok] == 1), n_neg = sum(y[ok] == 0))
   })
   stats <- data.frame(
     predictor = labels,
     auc = vapply(curves, `[[`, numeric(1), "auc"),
     lower = vapply(curves, `[[`, numeric(1), "lower"),
     upper = vapply(curves, `[[`, numeric(1), "upper"),
-    n = vapply(curves, `[[`, numeric(1), "n")
+    n = vapply(curves, `[[`, numeric(1), "n"),
+    n_pos = vapply(curves, `[[`, numeric(1), "n_pos"),
+    n_neg = vapply(curves, `[[`, numeric(1), "n_neg")
   )
 
   p <- ggplot() +
@@ -34,11 +40,17 @@ lab_roc <- function(data, outcome, predictor, positive = NULL, direction = "<",
 
   if (length(curves) == 1) {
     cv <- curves[[1]]
+    # short lines keep the label in the empty corner below the diagonal
+    label <- paste(c(sprintf("AUC = %.2f", cv$auc),
+                     sprintf("95%% CI %.2f-%.2f", cv$lower, cv$upper),
+                     if (show_n) sprintf("n: %s %d, %s %d", classes[2], cv$n_pos,
+                                         classes[1], cv$n_neg)),
+                   collapse = "\n")
     p <- p +
       geom_step(data = cv$df, aes(x = fpr, y = sensitivity), direction = "vh",
                 colour = "black", linewidth = 1) +
-      annotate("text", x = 1, y = 0.08, hjust = 1, size = .lab_style$text$roc,
-               label = sprintf("AUC = %.2f (%.2f,%.2f)", cv$auc, cv$lower, cv$upper))
+      annotate("text", x = 1, y = 0.03, hjust = 1, vjust = 0, size = .lab_style$text$roc,
+               lineheight = 0.9, label = label)
     if (youden) {
       yc <- pROC::coords(cv$roc, x = "best", best.method = "youden",
                          ret = c("threshold", "sensitivity", "specificity"))[1, ]

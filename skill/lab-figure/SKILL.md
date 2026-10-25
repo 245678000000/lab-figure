@@ -69,7 +69,9 @@ short script. Do not restyle templates or hand-write ggplot themes.
   `patchwork::wrap_plots(...) + patchwork::plot_annotation(tag_levels = "a")`,
   save with an explicit `size`. KM and forest plots are themselves
   composites: put them in as `patchwork::wrap_elements(full = p)`, otherwise
-  the risk table / forest columns get their own panel letters.
+  the risk table / forest columns get their own panel letters. A forest plot
+  needs the width of its own preset (about 6.4 in with the CI column): give it
+  a full row, or use `ci_text = FALSE` for a narrower one.
 - No template fits: write plain ggplot2 with `theme_lab()` and house scales,
   then `save_fig(p, name, size = "single")`. Say that it is not a template.
 - Column names with spaces or symbols are passed as plain strings; keep them
