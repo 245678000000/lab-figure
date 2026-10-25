@@ -5,7 +5,7 @@ Description: House plotting style (theme, palettes, size presets, export) and
     parameterised plot templates (ROC, Kaplan-Meier, forest, box, violin,
     rate bar, AUC bar, correlation heatmap, pie) distilled from the lab's
     published analysis code.
-License: file LICENSE
+License: GPL-3
 Encoding: UTF-8
 Depends:
     R (>= 4.1.0),

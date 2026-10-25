@@ -46,4 +46,7 @@ skill/lab-figure/scripts/labfig render figures/roc.R
 skill/lab-figure/scripts/labfig qa figures/roc.pdf
 ```
 
-第三方代码与数据来源见 `THIRD_PARTY_NOTICES.md`。
+## 许可证
+
+GPL-3.0，全文见 `LICENSE`。模板和风格改编自导师的分析代码（<https://github.com/rootchang>，同为 GPL-3.0），经作者同意公开。
+`skill/lab-figure/scripts/qa/` 下的检查脚本来自 nature-skills（Apache-2.0）。第三方代码与数据来源见 `THIRD_PARTY_NOTICES.md`。

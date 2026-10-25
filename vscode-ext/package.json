@@ -4,7 +4,7 @@
   "description": "Live preview for lab-figure R and Python scripts: edit the code on the left, the figure redraws on the right.",
   "version": "0.2.0",
   "publisher": "lab-figure",
-  "license": "SEE LICENSE IN LICENSE.md",
+  "license": "GPL-3.0-only",
   "private": true,
   "engines": {
     "vscode": "^1.90.0"
