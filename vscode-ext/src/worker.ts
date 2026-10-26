@@ -46,7 +46,7 @@ const RSCRIPT_LOCATIONS = [
 export function findRscript(configured: string): string {
   if (configured) return configured;
   for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
-    const candidate = path.join(dir, "Rscript");
+    const candidate = path.join(dir, process.platform === "win32" ? "Rscript.exe" : "Rscript");
     if (dir && fs.existsSync(candidate)) return candidate;
   }
   return RSCRIPT_LOCATIONS.find((p) => fs.existsSync(p)) ?? "Rscript";
@@ -56,7 +56,7 @@ export function findRscript(configured: string): string {
 export function findPython(configured: string): string {
   if (configured) return configured;
   const venv = path.join(os.homedir(), ".local/share/lab-figure/venv/bin/python");
-  return fs.existsSync(venv) ? venv : "python3";
+  return fs.existsSync(venv) ? venv : process.platform === "win32" ? "python" : "python3";
 }
 
 export function findLabfig(configured: string): string | undefined {
@@ -93,7 +93,10 @@ export class Worker extends EventEmitter {
   private start(): Promise<void> {
     if (this.starting) return this.starting;
     this.starting = new Promise((resolve, reject) => {
-      const proc = spawn(this.command, this.args, { stdio: ["pipe", "pipe", "pipe"] });
+      const proc = spawn(this.command, this.args, {
+        stdio: ["pipe", "pipe", "pipe"], windowsHide: true,
+        env: { ...process.env, PYTHONUTF8: "1" },
+      });
       this.proc = proc;
       this.buffer = "";
       let ready = false;
@@ -167,7 +170,8 @@ export class Worker extends EventEmitter {
   }
 
   render(file: string, code: string, cwd: string, size: Size = null): Promise<RenderResult> {
-    return this.request({ cmd: "render", path: file, code, cwd, size });
+    // R's parse(text=...) rejects carriage returns left by Windows CRLF files.
+    return this.request({ cmd: "render", path: file, code: code.replace(/\r\n?/g, "\n"), cwd, size });
   }
 
   reset(): Promise<RenderResult> {

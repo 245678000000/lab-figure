@@ -5,7 +5,7 @@ import { execFile } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
-import { Size, Worker, findLabfig, renderedFiles } from "./worker";
+import { Size, Worker, findLabfig, findPython, findRscript, renderedFiles } from "./worker";
 
 export const PREVIEW_LANGUAGES = ["r", "python"];
 
@@ -249,8 +249,14 @@ export class PreviewPanel {
 }
 
 function run(cmd: string, args: string[], cwd: string): Promise<{ code: number; out: string }> {
+  const cfg = vscode.workspace.getConfiguration("labFigure");
+  const env = { ...process.env, LABFIG_RSCRIPT: findRscript(cfg.get<string>("rscriptPath", "")), PYTHONUTF8: "1" };
+  if (cmd.toLowerCase().endsWith(".py")) {
+    args = [cmd, ...args];
+    cmd = findPython(cfg.get<string>("pythonPath", ""));
+  }
   return new Promise((resolve) => {
-    execFile(cmd, args, { cwd, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile(cmd, args, { cwd, env, windowsHide: true, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
       const code = err ? (typeof err.code === "number" ? err.code : 1) : 0;
       resolve({ code, out: `${stdout}${stderr}` });
     });

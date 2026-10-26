@@ -1,4 +1,11 @@
 .venv
+.runtime/
+.vscode/
+setup/R*-win.exe
+agent-app/workspace/
+.env
+.env.*
+!.env.example
 examples/out/
 figures/
 *.collision-audit.json

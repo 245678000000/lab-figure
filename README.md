@@ -1,4 +1,14 @@
-# lab-figure
+# AISI-figure
+
+本地科研作图桌面应用：左侧编辑 R / Python 代码，右侧预览图片，支持 30 类单图、模型辅助修改及可复现导出。可以在图上选择标题、坐标名称和统计说明，修改字体、字号，并拖动统计说明。
+
+- [应用功能与使用说明](agent-app/README.md)
+- [Windows 安装与桌面入口](setup/README-Windows.md)
+- [原始作图风格规范](docs/style-spec.md)
+
+本项目基于 [245678000000/lab-figure](https://github.com/245678000000/lab-figure) 扩展，保留原提交历史与 GPL-3.0 许可证。仓库包含程序源码和图标；本地账号会话、API 密钥、上传数据、生成图片、日志和运行环境不纳入本次同步。
+
+## 原有风格包与模板
 
 按导师的作图风格出图：固定的风格包 + 图型模板 + 一个很薄的 agent skill。
 
@@ -11,6 +21,7 @@
 | `docs/style-spec.md` | 风格规范：每个数值来自导师代码的哪里 |
 | `evals/` | 对比评测用的数据和记录 |
 | `vscode-ext/` | VS Code / Cursor 插件：左边改代码，右边实时出图（R 端是 `labstyle::serve()`），见其 README |
+| `agent-app/` | AISI-figure 桌面与网页应用、数据检查和统计分析、图中文字编辑、账号状态、回归测试 |
 
 ## 安装
 
