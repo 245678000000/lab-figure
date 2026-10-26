@@ -66,7 +66,7 @@ def test_selected_font_and_center_position_reach_export(engine):
 
 def test_moving_caption_preserves_its_original_custom_font_size():
     parent=scatter()
-    code=parent['code'].replace('save_fig(p,','p <- p + ggplot2::theme(plot.caption=ggplot2::element_text(size=14, family="Times New Roman"))\nsave_fig(p,')
+    code=parent['code'].replace('finish(p','p <- p + ggplot2::theme(plot.caption=ggplot2::element_text(size=14, family="Times New Roman"))\nfinish(p')
     updated=core.render_code(parent['id'],code,figure_edits=dict(note_position='manual',note_x=.5,note_y=.7))
     figure=inspect_figure(core.located('runs',updated['id']),updated)
     note=next(o for o in figure['objects'] if o['role']=='note')

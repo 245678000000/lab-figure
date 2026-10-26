@@ -30,7 +30,21 @@ BIO_CATALOG = {
     "lr_dot": entry("配体–受体气泡矩阵", "集合与互作", {"label": "配体–受体对", "group": "发送→接收群", "value": "已有通信分数", "padj": "校正后 P 值"}, ["value", "padj"], "读取已有通信分析结果；不从表达相似性推断细胞通信。"),
     "network": entry("互作网络图", "集合与互作", {"source": "起点", "target": "终点", "weight": "非负互作权重"}, ["weight"], "读取已有边表，采用固定环形布局；节点大小为连接次数，不自动推断互作。"),
     "histogram": entry("数值分布直方图", "样本检查", {"value": "数值列"}, ["value"], "保留全部有效观测，展示频数与基本描述统计。"),
-    "custom": entry("自定义单图", "自定义", {"x": "X 列", "y": "Y 列"}, [], "选择几何图层与列映射，生成可审查 R 脚本。不会执行模型提供的任意代码。", {"group": "分组（可选）"}),
+    "custom": entry("自定义单图", "自定义", {"x": "X 列", "y": "Y 列"}, [], "选择几何图层与列映射，生成可审查 R 脚本。", {"group": "分组（可选）"}),
+    "free": entry("AI 自由作图", "自定义", {}, [], "没有合适模板时用：在下方对话里描述想要的图（可以贴截图），AI 按实验室风格写 R 代码并运行。需要先连接模型。"),
+    "waterfall": entry("瀑布图", "临床与肿瘤", {"label": "患者 ID", "value": "最佳变化（%）"}, ["value"], "每行一位患者，按变化从大到小排列；虚线为 RECIST +20% / −30%。", {"group": "着色（如最佳疗效，可选）"}),
+    "swimmer": entry("泳道图", "临床与肿瘤", {"label": "患者 ID", "time": "治疗时长"}, ["time"], "每行一位患者，条长为治疗时长；选“仍在治疗”(0/1) 列时在条末画箭头。", {"group": "着色（可选）", "ongoing": "仍在治疗（0/1，可选）"}),
+    "oncoprint": entry("OncoPrint 突变图谱", "临床与肿瘤", {"sample": "样本", "label": "基因", "alteration": "突变类型"}, [], "长表：每行一个样本×基因的突变；显示突变样本最多的 20 个基因。同一基因多种突变记为 Multi_hit。"),
+    "nomogram": entry("列线图", "预测模型", {"outcome": "二分类结局", "predictors": "模型变量（多选）"}, [], "Logistic 回归：每个变量换算成分数，总分对应预测概率。统计表给出 OR 与 95% CI。"),
+    "calibration": entry("校准曲线", "预测模型", {"outcome": "二分类结局", "predictor": "预测概率（0–1）"}, ["predictor"], "按预测概率十分位分组，比较平均预测概率与实际发生率；报告 Brier、校准斜率和 Hosmer–Lemeshow 检验。"),
+    "dca": entry("DCA 决策曲线", "预测模型", {"outcome": "二分类结局", "predictors": "预测概率列（0–1，可多选）"}, ["predictors"], "各阈值概率下的净获益，与“全部治疗”“全不治疗”比较。"),
+    "time_roc": entry("时间依赖 ROC", "预测模型", {"time": "生存时间", "event": "事件状态", "predictor": "预测指标"}, ["time", "predictor"], "在各时间点比较已发生事件者和仍无事件者（删失按 IPCW 加权，与 timeROC 一致）。时间点在参数里填写。"),
+    "ridge": entry("山脊图", "分布与流向", {"group": "分组", "value": "数值指标"}, ["value"], "每组一条密度曲线，上下排列。"),
+    "density": entry("密度图", "分布与流向", {"value": "数值指标"}, ["value"], "密度曲线；选择分组时每组一条，叠加显示。", {"group": "分组（可选）"}),
+    "sankey": entry("桑基图", "分布与流向", {"predictors": "各阶段列（多选 2–4 列，按表中列的先后为阶段顺序）"}, [], "每行一个对象（或用计数列汇总），展示各阶段类别之间的流向。", {"count": "计数（可选）"}),
+    "venn": entry("韦恩图", "分布与流向", {"predictors": "集合成员列（0/1，多选 2–4 列）"}, ["predictors"], "每行一个元素，每列是一个集合的 0/1 成员标记；超过 4 个集合请用 UpSet。"),
+    "manhattan": entry("曼哈顿图", "GWAS", {"chr": "染色体", "pos": "位置（bp）", "pvalue": "P 值"}, ["pos", "pvalue"], "读取已完成的关联分析结果。全基因组显著线 5e-8、提示线 1e-5；可选 SNP 名称列标注最显著位点。", {"label": "SNP 名称（可选）"}),
+    "qq": entry("QQ 图", "GWAS", {"pvalue": "P 值"}, ["pvalue"], "观测与期望 −log10(P)，含 95% 置信带和基因组膨胀系数 λ。"),
 }
 
 
@@ -121,207 +135,43 @@ def validate_bio(d, spec, report):
         keys = [c["x"]] + ([c["group"]] if c.get("group") else [])
         if d.duplicated(keys).any():
             raise ValueError("每组每个 X 类别需有唯一的已有柱高；请先明确重复记录的汇总方法")
+    if chart == "waterfall" and d[c["label"]].duplicated().any():
+        raise ValueError("患者 ID 有重复；瀑布图每位患者一行")
+    if chart == "swimmer":
+        if (d[c["time"]] < 0).any():
+            raise ValueError("治疗时长不能为负数")
+        if c.get("ongoing") and not d[c["ongoing"]].dropna().isin([0, 1, True, False]).all():
+            raise ValueError("“仍在治疗”列须为 0/1 或 TRUE/FALSE")
+    if chart in ("calibration", "dca"):
+        for col in [c["predictor"]] if chart == "calibration" else c["predictors"]:
+            if not d[col].between(0, 1).all():
+                raise ValueError(f"{col} 应为 0–1 的预测概率")
+    if chart == "nomogram" and len(c["predictors"]) > 10:
+        raise ValueError("列线图最多选择 10 个变量")
+    if chart == "time_roc":
+        if (d[c["time"]] < 0).any():
+            raise ValueError("生存时间不能为负数")
+        try:
+            points = [float(v) for v in spec.time_points.replace("，", ",").split(",") if v.strip()]
+        except ValueError:
+            raise ValueError("时间点请写成数字，用逗号分隔，例如 12,36,60") from None
+        if not 1 <= len(points) <= 5 or min(points) <= 0 or max(points) >= d[c["time"]].max():
+            raise ValueError("请填写 1–5 个时间点，均大于 0 且小于最长随访时间")
+    if chart == "ridge" and not 2 <= d[c["group"]].nunique() <= 20:
+        raise ValueError("山脊图需要 2–20 个分组")
+    if chart == "sankey":
+        if not 2 <= len(c["predictors"]) <= 4:
+            raise ValueError("桑基图请选择 2–4 个阶段列")
+        if any(d[col].nunique() > 15 for col in c["predictors"]):
+            raise ValueError("每个阶段最多 15 个类别")
+    if chart == "venn":
+        if not 2 <= len(c["predictors"]) <= 4:
+            raise ValueError("韦恩图请选择 2–4 个集合；更多集合请用 UpSet")
+        if not d[c["predictors"]].isin([0, 1]).all().all():
+            raise ValueError("韦恩图成员标记必须为 0/1")
+    if chart in ("manhattan", "qq") and not d[c["pvalue"]].between(0, 1, inclusive="right").all():
+        raise ValueError("P 值必须在 (0, 1] 范围内")
     return d, report
-
-
-def compile_bio(spec, default_size=None):
-    cfg = json.dumps(spec.model_dump(), ensure_ascii=True)
-    header = '''# Generated by AISI-figure: one chart, reproducible from source_data.csv.
-# figure-style.R is included in the complete reproduction ZIP.
-library(labstyle)
-library(ggplot2)
-source("figure-style.R")
-d <- if(file.exists("source-schema.json")) { source("wide-table.R"); ais_read_wide() } else read.csv("source_data.csv", check.names = FALSE, encoding = "UTF-8", stringsAsFactors = FALSE)
-cfg <- jsonlite::fromJSON(CONFIG)
-col <- function(role) d[[cfg$columns[[role]]]]
-has <- function(role) !is.null(cfg$columns[[role]]) && nzchar(cfg$columns[[role]])
-features <- unlist(cfg$columns$predictors)
-if(isTRUE(cfg$all_numeric_features)) features <- unlist(jsonlite::fromJSON("analysis-settings.json")$columns$predictors)
-pal <- function(n) lab_colors(if (n <= 2) "binary" else if (n <= 10) "categorical" else "clusters", n)
-logp <- function(x) -log10(pmax(x, 1e-300))
-set.seed(42)
-s <- data.frame()
-wh <- ais_size(cfg$chart)
-'''.replace("CONFIG", '"analysis-settings.json"' if len(spec.columns.get('predictors', [])) > 200 else json.dumps(cfg, ensure_ascii=True))
-    chart = spec.chart
-    if default_size:
-        header = header.replace('wh <- ais_size(cfg$chart)', f'wh <- c({default_size[0]}, {default_size[1]})  # width, height in inches')
-    if chart in ("volcano", "ma"):
-        body = '''z <- data.frame(gene = col("label"), effect = col("effect"), padj = col("padj"))
-z$status <- factor(ifelse(z$padj < cfg$p_threshold & z$effect >= cfg$effect_threshold, "Up", ifelse(z$padj < cfg$p_threshold & z$effect <= -cfg$effect_threshold, "Down", "Other")), levels=c("Down","Other","Up"))
-z$plot_y <- logp(z$padj)
-'''
-        if chart == "volcano":
-            body += '''p <- ggplot(z, aes(effect, plot_y, colour=status)) + geom_point(size=ais_house$point$standard, alpha=.7) + geom_vline(xintercept=c(-cfg$effect_threshold,cfg$effect_threshold), linetype=2, linewidth=ais_house$line$thin, colour=ais_house$neutral$guide) + geom_hline(yintercept=logp(cfg$p_threshold),linetype=2,linewidth=ais_house$line$thin,colour=ais_house$neutral$guide) + labs(x="log2 fold change",y="-log10(adjusted P)")
-if (cfg$label_count > 0) { candidates <- z[z$status!="Other",]; lab <- head(candidates[order(candidates$padj, -abs(candidates$effect)),], cfg$label_count); p <- p + ggrepel::geom_text_repel(data=lab,aes(label=gene),size=ais_house$text$small,max.overlaps=Inf,seed=42,box.padding=.4,point.padding=.2,show.legend=FALSE,max.time=1) }
-'''
-        else:
-            body += '''z$mean <- col("mean")
-p <- ggplot(z,aes(mean,effect,colour=status)) + geom_point(size=ais_house$point$standard,alpha=.7) + geom_hline(yintercept=c(-cfg$effect_threshold,0,cfg$effect_threshold),linetype=2,linewidth=ais_house$line$thin,colour=ais_house$neutral$guide) + labs(x="Mean expression (input units)",y="log2 fold change")
-'''
-        body += '''p <- p + scale_colour_manual(values=c("Down"=lab_colors("binary")[1],"Other"=ais_house$neutral$other,"Up"=lab_colors("binary")[2]),drop=FALSE) + ais_theme()
-s <- data.frame(status=levels(z$status), genes=as.integer(table(z$status)),effect_threshold=cfg$effect_threshold,p_threshold=cfg$p_threshold)
-'''
-    elif chart in ("embedding", "feature", "scatter"):
-        body = '''z <- data.frame(x=col("x"),y=col("y"))
-'''
-        if chart == "feature":
-            body += '''z$value <- col("value")
-p <- ggplot(z,aes(x,y,colour=value)) + geom_point(size=ais_house$point$dense,alpha=.85) + scale_colour_gradient(low=ais_house$neutral$light,high=lab_colors("binary")[2],name=cfg$columns$value) + ais_theme() + coord_equal()
-s <- data.frame(n=nrow(z),min=min(z$value),max=max(z$value),mean=mean(z$value))
-'''
-        elif chart == "embedding":
-            body += '''z$group <- factor(col("group"))
-p <- ggplot(z,aes(x,y,colour=group)) + geom_point(size=ais_house$point$dense,alpha=.8) + scale_colour_manual(values=pal(nlevels(z$group)),name=cfg$columns$group) + ais_theme() + coord_equal()
-s <- data.frame(group=levels(z$group),n=as.integer(table(z$group)))
-'''
-        else:
-            body += '''if (has("group")) z$group <- factor(col("group"))
-p <- ggplot(z,aes(x,y)) + geom_point(size=ais_house$point$standard,alpha=.75) + geom_smooth(method="lm",formula=y~x,se=TRUE,colour=lab_colors("binary")[1],linewidth=ais_house$line$curve) + ais_theme()
-if (has("group")) p <- p + aes(colour=group) + scale_colour_manual(values=pal(nlevels(z$group)),name=cfg$columns$group)
-s <- do.call(rbind,lapply(c("spearman","pearson"),function(m) { ct <- suppressWarnings(cor.test(z$x,z$y,method=m,exact=FALSE)); data.frame(method=m,r=unname(ct$estimate),p=ct$p.value,n=nrow(z)) }))
-p <- p + labs(caption=paste(sprintf("%s r = %.3f; p = %.3g",s$method,s$r,s$p),collapse="\\n"))
-'''
-        body += '''p <- p + labs(x=cfg$columns$x,y=cfg$columns$y)
-'''
-    elif chart in ("expression_heatmap", "sample_distance"):
-        body = '''m <- as.matrix(d[,features,drop=FALSE]); rownames(m) <- as.character(col("label"))
-if(cfg$scaling == "row_z") { m <- t(scale(t(m))); m[is.nan(m)] <- 0 }
-if(cfg$scaling == "column_z") { m <- scale(m); m[is.nan(m)] <- 0 }
-'''
-        if chart == "sample_distance":
-            body += '''m <- as.matrix(dist(m,method="euclidean"))
-'''
-        body += '''z <- data.frame(row=rep(rownames(m),times=ncol(m)),column=rep(colnames(m),each=nrow(m)),value=as.vector(m))
-z$row <- factor(z$row,levels=rev(rownames(m))); z$column <- factor(z$column,levels=colnames(m))
-p <- ggplot(z,aes(column,row,fill=value)) + geom_tile() + labs(x=NULL,y=NULL,fill=if(cfg$chart=="sample_distance") "Euclidean distance" else cfg$scaling) + ais_theme(x_angle=45) + theme(panel.grid=element_blank())
-if(cfg$chart=="expression_heatmap" && cfg$scaling!="none") p <- p + scale_fill_gradient2(low=lab_colors("binary")[1],mid="white",high=lab_colors("binary")[2],midpoint=0,na.value=ais_house$neutral$missing) else p <- p + scale_fill_gradient(low="white",high=lab_colors("binary")[1],na.value=ais_house$neutral$missing)
-s <- z
-wh <- ais_matrix_size(nrow(m),ncol(m),rownames(m),colnames(m))
-'''
-    elif chart in ("marker_dot", "lr_dot"):
-        body = '''z <- data.frame(label=col("label"),group=col("group"),value=col("value"))
-z$size <- if(cfg$chart=="marker_dot") col("pct") else logp(col("padj"))
-if(cfg$chart=="lr_dot") z$padj <- col("padj")
-p <- ggplot(z,aes(group,label,size=size,colour=value)) + geom_point() + scale_size_continuous(range=c(ais_house$point$dense,ais_house$point$standard*3),name=if(cfg$chart=="marker_dot") "Percent expressing" else "-log10(adjusted P)") + scale_colour_gradient(low=ais_house$neutral$missing,high=lab_colors("binary")[2],name=cfg$columns$value) + labs(x=NULL,y=NULL) + ais_theme(x_angle=45)
-s <- z
-wh <- ais_matrix_size(length(unique(z$label)),length(unique(z$group)),unique(z$label),unique(z$group),legend_labels=c(cfg$columns$value,if(cfg$chart=="marker_dot") "Percent expressing" else "-log10(adjusted P)"))
-'''
-    elif chart == "composition":
-        body = '''z <- data.frame(sample=col("sample"),group=col("group"),count=if(has("count")) col("count") else 1)
-z <- aggregate(count~sample+group,z,sum); z$fraction <- z$count/ave(z$count,z$sample,FUN=sum)
-z$group <- factor(z$group)
-p <- ggplot(z,aes(sample,fraction,fill=group)) + geom_col(width=.75) + scale_fill_manual(values=pal(nlevels(z$group)),name=cfg$columns$group) + scale_y_continuous(labels=function(x) paste0(round(x*100),"%")) + labs(x=cfg$columns$sample,y="Cell composition") + ais_theme(x_angle=45)
-s <- z
-'''
-    elif chart in ("enrichment_dot", "enrichment_bar"):
-        body = '''z <- data.frame(term=col("label"),padj=col("padj"))
-z$significance <- logp(z$padj)
-'''
-        if chart == "enrichment_dot":
-            body += '''ratio <- function(v) vapply(strsplit(as.character(v),"/",fixed=TRUE),function(a) if(length(a)==2) as.numeric(a[1])/as.numeric(a[2]) else as.numeric(a[1]),numeric(1))
-z$ratio <- ratio(col("ratio")); z$count <- col("count")
-p <- ggplot(z,aes(ratio,reorder(term,significance),size=count,colour=significance)) + geom_point() + scale_colour_gradient(low=ais_house$neutral$other,high=lab_colors("binary")[2],name="-log10(adjusted P)") + scale_size_continuous(range=c(ais_house$point$standard,ais_house$point$standard*3),name="Gene count") + labs(x="Gene ratio",y=NULL) + ais_theme()
-'''
-        else:
-            body += '''p <- ggplot(z,aes(significance,reorder(term,significance))) + geom_col(fill=lab_colors("binary")[1],width=.7) + labs(x="-log10(adjusted P)",y=NULL) + ais_theme()
-'''
-        body += '''s <- z; wh <- ais_category_size(nrow(z),z$term,legend=cfg$chart=="enrichment_dot")
-'''
-    elif chart == "gsea":
-        body = '''z <- data.frame(rank=col("rank"),running_ES=col("value")); z <- z[order(z$rank),]
-p <- ggplot(z,aes(rank,running_ES)) + geom_hline(yintercept=0,colour=ais_house$neutral$guide,linewidth=ais_house$line$thin) + geom_line(colour=lab_colors("binary")[1],linewidth=ais_house$line$curve) + labs(x="Rank in ordered gene list",y="Running enrichment score (input)") + ais_theme()
-s <- data.frame(input_points=nrow(z),max_running_ES=max(z$running_ES),min_running_ES=min(z$running_ES))
-'''
-    elif chart in ("paired", "paired_delta"):
-        body = '''z <- data.frame(pair=as.character(col("pair")),condition=as.character(col("group")),value=col("value"))
-other <- setdiff(sort(unique(z$condition)),cfg$reference); z$condition <- factor(z$condition,levels=c(cfg$reference,other))
-a <- z[z$condition==cfg$reference,]; b <- z[z$condition==other,]; b <- b[match(a$pair,b$pair),]
-delta <- b$value-a$value
-wt <- suppressWarnings(wilcox.test(b$value,a$value,paired=TRUE,exact=FALSE))
-s <- data.frame(reference=cfg$reference,comparison=other,n_pairs=length(delta),mean_delta=mean(delta),median_delta=median(delta),test="paired Wilcoxon",p=wt$p.value)
-'''
-        if chart == "paired":
-            body += '''p <- ggplot(z,aes(condition,value,group=pair)) + geom_line(colour=ais_house$neutral$other,linewidth=ais_house$line$standard) + geom_point(aes(colour=condition),size=ais_house$point$standard) + scale_colour_manual(values=pal(2),guide="none") + labs(x=NULL,y=cfg$columns$value) + ais_theme()
-'''
-        else:
-            body += '''dd <- data.frame(pair=factor(a$pair,levels=a$pair),delta=delta)
-p <- ggplot(dd,aes(pair,delta)) + geom_hline(yintercept=0,linetype=2,colour=ais_house$neutral$guide) + geom_segment(aes(xend=pair,y=0,yend=delta),colour=ais_house$neutral$guide) + geom_point(colour=lab_colors("binary")[1],size=ais_house$point$standard) + labs(x="Pair ID",y=paste0(other," - ",cfg$reference)) + ais_theme(x_angle=45)
-'''
-        body += '''p <- p + labs(caption=sprintf("Paired Wilcoxon p = %s\\nn = %d pairs",format_p_value(wt$p.value),length(delta)))
-'''
-    elif chart == "pca":
-        body = '''m <- as.matrix(d[,features,drop=FALSE])
-if(cfg$scaling=="row_z") m <- t(scale(t(m)))
-fit <- prcomp(m,center=TRUE,scale.=cfg$scaling=="column_z")
-variance <- fit$sdev^2/sum(fit$sdev^2)
-z <- data.frame(sample=col("label"),PC1=fit$x[,1],PC2=fit$x[,2])
-p <- ggplot(z,aes(PC1,PC2)) + geom_point(size=ais_house$point$standard,colour=lab_colors("binary")[1]) + labs(x=sprintf("PC1 (%.1f%%)",100*variance[1]),y=sprintf("PC2 (%.1f%%)",100*variance[2])) + ais_theme()
-if(has("group")) { z$group <- factor(col("group")); p <- ggplot(z,aes(PC1,PC2,colour=group)) + geom_point(size=ais_house$point$standard) + scale_colour_manual(values=pal(nlevels(z$group)),name=cfg$columns$group) + labs(x=sprintf("PC1 (%.1f%%)",100*variance[1]),y=sprintf("PC2 (%.1f%%)",100*variance[2])) + ais_theme() }
-s <- data.frame(component=paste0("PC",seq_along(variance)),variance_explained=variance)
-write.csv(z,"pca_coordinates.csv",row.names=FALSE); write.csv(fit$rotation,"pca_loadings.csv")
-'''
-    elif chart == "missingness":
-        body = '''s <- data.frame(column=features,missing=vapply(d[,features,drop=FALSE],function(x) sum(is.na(x)),integer(1)),rows=nrow(d))
-s$fraction <- s$missing/s$rows
-p <- ggplot(s,aes(reorder(column,fraction),fraction)) + geom_col(fill=lab_colors("binary")[1],width=.7) + coord_flip() + scale_y_continuous(labels=function(x) paste0(round(100*x),"%"),limits=c(0,1)) + labs(x=NULL,y="Missing values") + ais_theme()
-wh <- ais_category_size(length(features),features)
-'''
-    elif chart == "upset":
-        body = '''m <- as.matrix(d[,features,drop=FALSE]); combinations <- apply(m,1,paste0,collapse="")
-tab <- sort(table(combinations),decreasing=TRUE); tab <- tab[names(tab)!=paste0(rep(0,ncol(m)),collapse="")]
-if(length(tab)==0) stop("No non-empty intersections")
-z <- data.frame(intersection=names(tab),count=as.numeric(tab)); z$intersection <- factor(z$intersection,levels=names(tab))
-top <- ggplot(z,aes(intersection,count)) + geom_col(fill=lab_colors("binary")[1],width=.7) + labs(x=NULL,y="Intersection size") + ais_theme() + theme(axis.text.x=element_blank(),axis.ticks.x=element_blank())
-grid <- expand.grid(intersection=names(tab),set=seq_along(features)); grid$member <- mapply(function(x,i) as.integer(substr(x,i,i)),grid$intersection,grid$set)
-grid$intersection <- factor(grid$intersection,levels=names(tab))
-bottom <- ggplot(grid,aes(intersection,set)) + geom_point(colour=ais_house$neutral$light,size=ais_house$point$standard) + geom_line(data=grid[grid$member==1,],aes(group=intersection),colour=lab_colors("binary")[1],linewidth=ais_house$line$standard) + geom_point(data=grid[grid$member==1,],colour=lab_colors("binary")[1],size=ais_house$point$standard) + scale_y_continuous(breaks=seq_along(features),labels=features) + labs(x="Exact intersection membership",y=NULL) + ais_theme() + theme(axis.text.x=element_blank(),axis.ticks.x=element_blank())
-p <- patchwork::wrap_plots(top,bottom,ncol=1,heights=c(2,1)); s <- z
-wh <- ais_matrix_size(length(features)+5,length(tab),features,names(tab))
-'''
-    elif chart == "network":
-        body = '''edges <- data.frame(source=as.character(col("source")),target=as.character(col("target")),weight=col("weight"))
-names <- sort(unique(c(edges$source,edges$target))); angle <- seq(0,2*pi,length.out=length(names)+1)[-1]
-nodes <- data.frame(node=names,x=cos(angle),y=sin(angle)); nodes$degree <- as.integer(table(factor(c(edges$source,edges$target),levels=names)))
-edges$x <- nodes$x[match(edges$source,nodes$node)]; edges$y <- nodes$y[match(edges$source,nodes$node)]; edges$xend <- nodes$x[match(edges$target,nodes$node)]; edges$yend <- nodes$y[match(edges$target,nodes$node)]
-p <- ggplot() + geom_segment(data=edges,aes(x,y,xend=xend,yend=yend,linewidth=weight),alpha=.35,colour=lab_colors("binary")[1],arrow=grid::arrow(length=grid::unit(.08,"inches"))) + scale_linewidth_continuous(range=c(.2,2),name="Input weight") + geom_point(data=nodes,aes(x,y,size=degree),colour=lab_colors("binary")[1]) + ggrepel::geom_text_repel(data=nodes,aes(x,y,label=node),size=ais_house$text$small,seed=42,max.overlaps=Inf,show.legend=FALSE) + coord_equal(clip="off") + ais_theme() + theme(axis.title=element_blank(),axis.text=element_blank(),axis.ticks=element_blank(),axis.line=element_blank())
-s <- nodes
-'''
-    elif chart == "histogram":
-        body = '''z <- data.frame(value=col("value"))
-p <- ggplot(z,aes(value)) + geom_histogram(bins=cfg$bins,fill=lab_colors("binary")[1],colour="white",linewidth=ais_house$line$thin) + labs(x=cfg$columns$value,y="Frequency") + ais_theme()
-s <- data.frame(n=nrow(z),mean=mean(z$value),sd=sd(z$value),median=median(z$value),min=min(z$value),max=max(z$value))
-'''
-    else:
-        body = '''z <- data.frame(x=col("x"),y=col("y"))
-if(has("group")) z$group <- factor(col("group"))
-if(cfg$geometry %in% c("box","violin")) z$x <- factor(z$x)
-p <- ggplot(z,aes(x,y))
-if(has("group")) p <- p + aes(colour=group)
-if(cfg$geometry=="point") p <- p + geom_point(size=ais_house$point$standard,alpha=.75)
-if(cfg$geometry=="line") p <- p + geom_line(linewidth=ais_house$line$curve) + geom_point(size=ais_house$point$standard)
-if(cfg$geometry=="bar") p <- p + geom_col(fill=lab_colors("binary")[1],width=.7)
-if(cfg$geometry=="box") p <- p + geom_boxplot() + geom_jitter(width=.12,size=ais_house$point$standard)
-if(cfg$geometry=="violin") p <- p + geom_violin() + geom_point(position=position_jitter(width=.1,seed=42),size=ais_house$point$standard)
-if(has("group")) p <- p + scale_colour_manual(values=pal(nlevels(z$group)),name=cfg$columns$group)
-p <- p + labs(x=cfg$columns$x,y=cfg$columns$y) + ais_theme()
-s <- data.frame(input_rows=nrow(z),geometry=cfg$geometry)
-'''
-    footer = '''
-if(nzchar(cfg$title)) { if(cfg$chart=="upset") p <- p + patchwork::plot_annotation(title=cfg$title) else p <- p + labs(title=cfg$title) }
-if(nzchar(cfg$x_label) && cfg$chart!="upset") p <- p + labs(x=cfg$x_label)
-if(nzchar(cfg$y_label) && cfg$chart!="upset") p <- p + labs(y=cfg$y_label)
-if(cfg$size!="template") wh <- lab_sizes()[[cfg$size]]
-p <- ais_apply_colors(p)
-wh <- ais_export_size(wh)
-ais_write_style(wh)
-save_fig(p,"figure",dir=".",size=wh,formats=c("pdf","png","svg"))
-if(any(grepl("[^ -~]",c(names(d),unlist(d[vapply(d,is.character,logical(1))]),cfg$title,cfg$x_label,cfg$y_label),perl=TRUE))) { grDevices::cairo_pdf("figure.pdf",width=wh[1],height=wh[2],family="Arial"); print(p); grDevices::dev.off() }
-jsonlite::write_json(s,"stats.json",dataframe="rows",auto_unbox=TRUE,na="null",pretty=TRUE,digits=NA)
-write.csv(s,"statistics.csv",row.names=FALSE)
-writeLines(capture.output(sessionInfo()),"session-info.txt")
-'''
-    return header + body + footer
 
 
 def demo_recipe(chart):
@@ -375,4 +225,54 @@ def demo_recipe(chart):
         return d, {"source": "source", "target": "target", "weight": "weight"}, {}
     if chart == "histogram":
         return pd.DataFrame({"value": rng.normal(5, 1, 100)}), {"value": "value"}, {}
+    if chart in ("waterfall", "swimmer"):
+        n = 30
+        d = pd.DataFrame({"patient": [f"P{i+1:02d}" for i in range(n)], "best_change": np.round(rng.normal(-12, 32, n), 1),
+                          "response": rng.choice(["CR", "PR", "SD", "PD"], n, p=[.1, .25, .35, .3]),
+                          "months": np.round(rng.exponential(9, n) + .5, 1), "ongoing": rng.integers(0, 2, n)})
+        if chart == "waterfall":
+            return d, {"label": "patient", "value": "best_change", "group": "response"}, {}
+        return d, {"label": "patient", "time": "months", "group": "response", "ongoing": "ongoing"}, {}
+    if chart == "oncoprint":
+        genes = ["TP53", "KRAS", "PIK3CA", "CDKN2A", "NOTCH1", "FAT1"]
+        rows = [(f"S{s+1:02d}", g, rng.choice(["Missense", "Nonsense", "Frame_shift", "Splice"]))
+                for s in range(30) for g in genes if rng.random() < .55 - .07 * genes.index(g)]
+        return pd.DataFrame(rows, columns=["sample", "gene", "type"]), {"sample": "sample", "label": "gene", "alteration": "type"}, {}
+    if chart in ("nomogram", "calibration", "dca", "time_roc"):
+        n = 150
+        d = pd.DataFrame({"score": np.round(rng.normal(0, 1, n), 3), "age": np.round(rng.normal(60, 9, n)),
+                          "stage": rng.choice(["I-II", "III-IV"], n)})
+        lp = -.5 + .9 * d.score + .03 * (d.age - 60) + .6 * (d.stage == "III-IV")
+        d["response"] = rng.binomial(1, 1 / (1 + np.exp(-lp)))
+        d["model_prob"] = np.round(1 / (1 + np.exp(-lp)), 4)
+        d["simple_prob"] = np.round(1 / (1 + np.exp(-(-.4 + .7 * d.score))), 4)
+        d["os_months"] = np.round(rng.exponential(30 * np.exp(-.5 * d.score)) + .5, 1)
+        d["death"] = rng.binomial(1, .7, n)
+        if chart == "nomogram":
+            return d, {"outcome": "response", "predictors": ["score", "age", "stage"]}, {"positive": "1"}
+        if chart == "calibration":
+            return d, {"outcome": "response", "predictor": "model_prob"}, {"positive": "1"}
+        if chart == "dca":
+            return d, {"outcome": "response", "predictors": ["model_prob", "simple_prob"]}, {"positive": "1"}
+        return d, {"time": "os_months", "event": "death", "predictor": "score"}, {"positive": "1", "time_points": "12,24,36"}
+    if chart in ("ridge", "density"):
+        groups = np.repeat(["T cell", "B cell", "Myeloid", "NK"], 60)
+        d = pd.DataFrame({"cell_type": groups, "signature": np.round(rng.normal(0, 1, 240) + np.repeat([0, .8, -.5, 1.4], 60), 3)})
+        return d, {"group": "cell_type", "value": "signature"}, {}
+    if chart == "sankey":
+        n = 80
+        first = rng.choice(["SD", "PR", "PD"], n, p=[.45, .3, .25])
+        second = np.where(rng.random(n) < .6, first, rng.choice(["CR", "PR", "SD", "PD"], n))
+        third = np.where(rng.random(n) < .7, second, rng.choice(["CR", "PR", "SD", "PD"], n))
+        return pd.DataFrame({"baseline": first, "week_12": second, "week_24": third}), {"predictors": ["baseline", "week_12", "week_24"]}, {}
+    if chart == "venn":
+        return pd.DataFrame(rng.integers(0, 2, (120, 3)), columns=["DEG_set_A", "DEG_set_B", "DEG_set_C"]), {"predictors": ["DEG_set_A", "DEG_set_B", "DEG_set_C"]}, {}
+    if chart in ("manhattan", "qq"):
+        chromosomes = [str(i) for i in range(1, 23)]
+        d = pd.DataFrame({"chr": np.repeat(chromosomes, 150), "pos": np.tile(np.arange(1, 151) * 500_000, 22), "p": rng.uniform(0, 1, 3300)})
+        d.loc[[400, 401, 2000], "p"] = [2e-9, 4e-8, 6e-11]
+        d["snp"] = [f"rs{1000 + i}" for i in range(len(d))]
+        return d, ({"chr": "chr", "pos": "pos", "pvalue": "p", "label": "snp"} if chart == "manhattan" else {"pvalue": "p"}), {}
+    if chart == "free":
+        return pd.DataFrame({"x": np.arange(30), "y": rng.normal(0, 1, 30).cumsum()}), {}, {}
     return pd.DataFrame({"x": np.arange(30), "y": rng.normal(0, 1, 30).cumsum()}), {"x": "x", "y": "y"}, {"geometry": "line"}

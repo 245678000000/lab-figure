@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import tempfile
 import threading
 import time
 import uuid
@@ -232,9 +233,10 @@ def login_state(key: str):
 
 class ChatRequest(BaseModel):
     dataset_id: str
-    text: str = Field(min_length=1, max_length=5000)
+    text: str = Field(min_length=1, max_length=8000)
     spec: PlotSpec
     direct: bool = False
+    images: list[str] = Field(default_factory=list, max_length=4)
 
 
 class CodeRequest(BaseModel):
@@ -243,8 +245,16 @@ class CodeRequest(BaseModel):
 
 
 class CodeRevisionRequest(CodeRequest):
-    text: str = Field(min_length=1, max_length=5000)
+    text: str = Field(min_length=1, max_length=8000)
     include_image: bool = False
+    images: list[str] = Field(default_factory=list, max_length=4)
+
+
+class FreeRunRequest(BaseModel):
+    """A script the model wrote for a figure no template covers, confirmed by the user."""
+    dataset_id: str
+    code: str = Field(min_length=1, max_length=200000)
+    spec: PlotSpec
 
 
 class FigureEditRequest(CodeRequest):
@@ -266,9 +276,9 @@ def job_worker(key, target, request):
 
 def start_job(target, request):
     context = {}
-    if getattr(request, 'dataset_id', None) and not isinstance(request, ChatRequest):
+    if getattr(request, 'dataset_id', None) and not isinstance(request, (ChatRequest, FreeRunRequest)):
         context = {'dataset_id':request.dataset_id, 'kind':'analysis'}
-    elif isinstance(request, ChatRequest):
+    elif isinstance(request, (ChatRequest, FreeRunRequest)):
         context = {'dataset_id':request.dataset_id}
     elif isinstance(request, CodeRequest):
         parent = read_json(located('runs', request.parent_run_id) / 'manifest.json')
@@ -291,7 +301,9 @@ def execute_code_job(key, request):
         if isinstance(request, CodeRevisionRequest):
             jobs[key]["events"].append({"message": "模型正在修改当前代码", "stage": "model", "at": time.time()})
             parent = read_json(located("runs", request.parent_run_id) / "manifest.json")
-            answer = agent.revise_code(request.code, request.text, parent["spec"]["engine"], request.parent_run_id, request.include_image)
+            with tempfile.TemporaryDirectory() as folder:
+                images = agent.save_images(request.images, folder)
+                answer = agent.revise_code(request.code, request.text, parent["spec"]["engine"], request.parent_run_id, request.include_image, images)
         else:
             jobs[key]["events"].append({"message": "运行编辑后的代码并更新图片", "stage": "render", "at": time.time()})
             result = render_code(request.parent_run_id, request.code, figure_edits=request.edits.model_dump() if isinstance(request, FigureEditRequest) else None)
@@ -340,8 +352,14 @@ def execute_job(key, request):
             result = render(request.dataset_id, request.spec)
             answer = {"message": "已按界面参数生成图像。统计、样本选择和自动检查见右侧。", "run": result, "mode": "template"}
         else:
-            turn = agent.model_turn if agent.SETTINGS.enabled else agent.local_turn
-            answer = turn(request.dataset_id, request.text, request.spec, emit)
+            if agent.SETTINGS.enabled:
+                with tempfile.TemporaryDirectory() as folder:
+                    images = agent.save_images(request.images, folder)
+                    answer = agent.model_turn(request.dataset_id, request.text, request.spec, emit, images)
+            elif request.images:
+                answer = {"message": "看图需要先连接模型（右上角“模型设置”）。不连接模型时，可以在左侧选图型和列后点“生成图像”。", "run": None, "mode": "local"}
+            else:
+                answer = agent.local_turn(request.dataset_id, request.text, request.spec, emit)
         with lock:
             task_control.check()
             job.update(status="complete", result=answer)
@@ -353,6 +371,28 @@ def execute_job(key, request):
         if secret:
             message = message.replace(secret, "[redacted]")
         job.update(status="error", error=message[:4000])
+
+
+def execute_free_job(key, request):
+    try:
+        spec = request.spec.model_copy(update={"chart": "free", "engine": "r"})
+        jobs[key]["events"].append({"message": "运行 AI 写的作图代码", "stage": "render", "at": time.time()})
+        result = render(request.dataset_id, spec, code=request.code)
+        with lock:
+            task_control.check()
+            jobs[key].update(status="complete", result={"message": "已运行 AI 写的代码，图片已生成。之后可以继续在对话里修改。", "run": result, "mode": "free"})
+    except task_control.Cancelled:
+        raise
+    except Exception as exc:
+        jobs[key].update(status="error", error=str(exc)[:4000])
+        if getattr(exc, "diagnostic", None):
+            jobs[key]["diagnostic"] = exc.diagnostic
+
+
+@app.post("/api/free/run")
+def run_free_code(request: FreeRunRequest):
+    load_dataset(request.dataset_id)
+    return start_job(execute_free_job, request)
 
 
 @app.post("/api/chat")

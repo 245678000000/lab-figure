@@ -178,15 +178,16 @@ def start_login(provider):
     return {"id": key, **job}
 
 
-def planner(provider, prompt, model="", image_path=None):
-    if image_path and provider != 'codex':
+def planner(provider, prompt, model="", image_path=None, image_paths=()):
+    images = [p for p in [image_path, *image_paths] if p]
+    if images and provider != 'codex':
         raise ValueError('当前账号桥接的看图入口支持 ChatGPT / Codex；其他平台请使用支持图片的 API 模型，或关闭看图继续文字修改。')
     executable = cli_path(provider)
     if not executable:
         raise ValueError("官方账号客户端未安装")
     work = ROOT / "workspace/account-bridge"
     work.mkdir(parents=True, exist_ok=True)
-    schema = {"type": "object", "properties": {"action": {"type": "string", "enum": ["render", "answer"]}, "message": {"type": "string"}, "spec_json": {"type": "string"}}, "required": ["action", "message", "spec_json"], "additionalProperties": False}
+    schema = {"type": "object", "properties": {"action": {"type": "string", "enum": ["render", "answer", "code"]}, "message": {"type": "string"}, "spec_json": {"type": "string"}}, "required": ["action", "message", "spec_json"], "additionalProperties": False}
     schema_file = work / "response-schema.json"
     schema_file.write_text(json.dumps(schema), encoding="utf-8")
     if provider == "codex":
@@ -198,8 +199,8 @@ def planner(provider, prompt, model="", image_path=None):
         args = command(provider) + ["--agent-file", str(agent_file), "--output-format", "text", "-p", prompt, "--skills-dir", str(work)]
     if model:
         args.extend(["--model", model])
-    if image_path:
-        args.extend(['--image', str(image_path)])
+    for image in images:
+        args.extend(['--image', str(image)])
     try:
         r = task_control.run(args, input=None if provider == "kimi" else prompt, cwd=work, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180, env=safe_env(), creationflags=FLAGS)
         if r.returncode:
@@ -219,7 +220,7 @@ def planner(provider, prompt, model="", image_path=None):
             content = r.stdout.strip()
         content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip())
         result = json.loads(content)
-        if result.get("action") not in ("render", "answer") or not isinstance(result.get("spec_json"), str):
+        if result.get("action") not in ("render", "answer", "code") or not isinstance(result.get("spec_json"), str):
             raise ValueError("账号模型未返回有效作图计划，请重试")
         return result
     except subprocess.TimeoutExpired:

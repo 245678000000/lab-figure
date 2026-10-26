@@ -1,6 +1,6 @@
 # AISI-figure
 
-本地科研作图桌面应用：左侧编辑 R / Python 代码，右侧预览图片，支持 30 类单图、模型辅助修改及可复现导出。可以在图上选择标题、坐标名称和统计说明，修改字体、字号，并拖动统计说明。
+本地科研作图桌面应用：左侧编辑 R / Python 代码，右侧预览图片，支持 43 类模板图和 AI 自由作图、对话里贴截图和报错提醒，以及可复现导出。可以在图上选择标题、坐标名称和统计说明，修改字体、字号，并拖动统计说明。
 
 - [应用功能与使用说明](agent-app/README.md)
 - [Windows 安装与桌面入口](setup/README-Windows.md)
@@ -14,14 +14,14 @@
 
 | 目录 | 内容 |
 |---|---|
-| `labstyle/` | R 包：`theme_lab()`、调色板、`save_fig()` 和 9 个模板（ROC、KM、森林图、箱线图、小提琴图、比例柱状图、AUC 柱状图、相关性热图、饼图） |
+| `labstyle/` | R 包：`theme_lab()`、调色板、`save_fig()` 和 43 个模板：原有 9 个（ROC、KM、森林图、箱线图、小提琴图、比例柱状图、AUC 柱状图、相关性热图、饼图），组学与样本检查 21 个（火山、PCA、UMAP、富集等），以及瀑布图、泳道图、OncoPrint、列线图、校准曲线、DCA、时间依赖 ROC、山脊图、密度图、桑基图、韦恩图、曼哈顿图、QQ 图 |
 | `labstyle-py/` | Python 包 `labstyle_py`：同一套风格、`save_fig()` 和 ROC / 箱线图 / 比例柱状图模板，统计结果与 R 版一致（测试直接对照 R） |
 | `skill/lab-figure/` | 给 Claude Code / Codex 用的 skill，入口脚本 `scripts/labfig` |
 | `examples/` | 每个模板一个示例（用 HNSCC 数据），`style_sheet.R` 生成风格样张 |
 | `docs/style-spec.md` | 风格规范：每个数值来自导师代码的哪里 |
 | `evals/` | 对比评测用的数据和记录 |
 | `vscode-ext/` | VS Code / Cursor 插件：左边改代码，右边实时出图（R 端是 `labstyle::serve()`），见其 README |
-| `agent-app/` | AISI-figure 桌面与网页应用、数据检查和统计分析、图中文字编辑、账号状态、回归测试 |
+| `agent-app/` | AISI-figure 桌面与网页应用：左代码、中图片、右对话（可贴截图、报错提醒、显示 AI 改动），数据检查和统计分析、图中文字编辑、账号状态、回归测试 |
 
 ## 安装
 

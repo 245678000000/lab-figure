@@ -22,7 +22,7 @@ def isolate(tmp_path, monkeypatch):
     agent.HISTORY.clear()
 
 
-@pytest.mark.parametrize("chart", list(BIO_CATALOG))
+@pytest.mark.parametrize("chart", [c for c in BIO_CATALOG if c != "free"])  # "free" needs a model
 def test_new_single_charts_render_from_real_data(chart):
     client = TestClient(main.app)
     dataset = client.post(f"/api/demo/{chart}", json={}).json()

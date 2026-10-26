@@ -4,6 +4,8 @@ options(repos = c(CRAN = "https://cloud.r-project.org"))
 need <- c(
   # labstyle
   "ggplot2", "patchwork", "pROC", "survival", "ragg", "svglite", "testthat",
+  # gene / SNP labels in the volcano, network and Manhattan templates
+  "ggrepel",
   # reading data in figure scripts
   "readxl", "openxlsx", "jsonlite",
   # only for the side-by-side check against the original helper functions

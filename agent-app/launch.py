@@ -23,7 +23,7 @@ def running():
 def ensure_server():
     if running():
         return
-    python = ROOT.parent / ".venv/Scripts/python.exe"
+    python = ROOT.parent / (".venv/Scripts/python.exe" if os.name == "nt" else ".venv/bin/python")
     log_dir = ROOT / "workspace"
     log_dir.mkdir(exist_ok=True)
     with (log_dir / "server.log").open("a", encoding="utf-8") as log:
@@ -40,7 +40,8 @@ def ensure_server():
 
 
 if __name__ == '__main__':
-    if '--browser' in sys.argv:
+    # The desktop window uses Windows WebView2; other systems open the browser.
+    if '--browser' in sys.argv or os.name != 'nt':
         ensure_server()
         webbrowser.open(URL)
     else:

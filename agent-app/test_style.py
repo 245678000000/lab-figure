@@ -79,7 +79,7 @@ def test_balanced_scatter_export_preserves_stats_and_remains_code_editable():
     assert new['figure_style']['width_in'] == new['figure_style']['height_in'] == 4.6
     assert new['figure_style']['axis_text_pt'] == old['figure_style']['axis_text_pt']
     assert all(q['verdict'] == 'PASS' for q in new['qa']), new['qa']
-    code = new['code'].replace('wh <- c(4.6, 4.6)', 'wh <- c(4.6, 4.0)')
+    code = new['code'].replace('size = c(4.6, 4.6)', 'size = c(4.6, 4.0)')
     edited = core.render_code(new['id'], code)
     assert edited['figure_style']['height_in'] == 4.0
     assert core.read_json(core.located('runs', new['id'])/'manifest.json')['figure_style']['height_in'] == 4.6

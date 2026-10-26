@@ -17,7 +17,7 @@ def test_scatter_text_and_note_edit_keeps_statistics_and_history():
     parent = core.render(data['id'], core.PlotSpec(chart='scatter', columns=columns, **options))
     folder = core.located('runs', parent['id'])
     before = {p.name: p.read_bytes() for p in folder.iterdir() if p.is_file()}
-    code = parent['code'].replace('set.seed(42)', '# Keep my code\nset.seed(42)')
+    code = parent['code'].replace('d <- read_source()', '# Keep my code\nd <- read_source()')
     edits = dict(title='Updated title', x_label='Before', y_label='After', note_position='manual', note_x=.25, note_y=.85)
     revised = core.render_code(parent['id'], code, figure_edits=edits)
     assert revised['stats'] == parent['stats']

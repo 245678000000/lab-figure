@@ -8,6 +8,8 @@
 
 桌面版使用 Windows WebView2 和 pywebview，保留 AISI 图标及原有左右代码/图片布局。导入使用系统文件选择器，导出使用“保存文件”窗口。原有数据和图像历史共用 `workspace`；桌面窗口的界面偏好与代码草稿保存在 `workspace/desktop-profile`。浏览器中尚未运行的草稿仍留在原浏览器，不会自动迁移。
 
+macOS / Linux 没有桌面窗口，运行 `.venv/bin/python agent-app/launch.py` 会启动服务并在浏览器打开。macOS 上导出含中文的 PDF 需要先安装 XQuartz（`brew install --cask xquartz`），否则会提示安装；英文标签不需要。
+
 关闭桌面窗口后，本机计算服务保留，避免中断正在进行的作图任务。重启电脑后再次双击即可启动。桌面窗口报错时检查 `workspace/desktop.log`，服务日志在 `workspace/server.log`。
 
 安装桌面依赖：`..\.venv\Scripts\python.exe -m pip install -r requirements-desktop.txt`。重建桌面入口：运行仓库中的 `setup/create_desktop_shortcut.ps1`。需要浏览器版时可运行 `..\.venv\Scripts\pythonw.exe launch.py --browser`。
@@ -30,14 +32,29 @@
 
 支持 CSV、TSV、XLSX 上传，工作表与表头选择、列映射、缺失值预览。每个图型都提供人工合成示例。
 
-共有 30 个单图入口（包括受约束的自定义图层）：
+共有 43 个模板图型，外加“AI 自由作图”：
 
 - 基础与临床：ROC、箱线、小提琴、KM、Cox 森林、应答率柱图、AUC 对比、相关热图、构成饼图。
+- 临床与肿瘤：瀑布图、泳道图、OncoPrint 突变图谱。
+- 预测模型：列线图、校准曲线、DCA 决策曲线、时间依赖 ROC（与 timeROC 结果一致）。
 - 差异与富集：火山、MA、富集气泡、富集条形、GSEA 运行分数曲线。
 - 表达与单细胞：表达热图、已有 UMAP / t-SNE 坐标、Feature、Marker dot、细胞组成、配体受体气泡。
+- 分布与流向：山脊图、密度图、桑基图、韦恩图（2–4 个集合）。
+- GWAS：曼哈顿图、QQ 图。
 - 统计与质量检查：配对连线、配对差值、相关散点、PCA、样本距离、缺失值、UpSet、网络、直方、自定义图层。
 
-R 支持所有入口，Python 支持 ROC、箱线、应答率三个模板。自定义入口支持散点、折线、柱状、箱线、小提琴的声明式参数，不接受模型提交任意代码。
+所有模板都在 `labstyle` R 包里（`lab_volcano()`、`lab_waterfall()` 等），所以左侧脚本很短：
+
+```r
+source("figure-style.R")   # 实验室风格、read_source() 和 finish()
+d <- read_source()         # 这张图用的数据表
+p <- lab_waterfall(d, id = "patient", value = "best_change", group = "response")
+finish(p)                  # 导出 PDF / PNG / SVG 和统计表
+```
+
+颜色、尺寸、中文 PDF、统计表和版本记录都在 `finish()` 里完成。仓库里的 `labstyle` 更新后，应用第一次出图时会自动重新安装它。
+
+R 支持所有入口，Python 支持 ROC、箱线、应答率三个模板。模板都不合适时（例如雷达图、面积图、照着参考图画），选“AI 自由作图”或直接在对话里描述：模型按实验室风格写一个完整 R 脚本，对话里显示代码，点“运行这段代码”后才执行。
 
 UMAP / t-SNE、差异分析、富集及细胞通讯等预计算结果须由用户提供；画图不会冒充完成其上游分析。PCA、配对差值、相关系数等入口会计算并保存实际结果。火山图保留全部点，阈值与标注数可设置；矩阵支持不缩放、按行或按列 Z-score。
 
@@ -53,9 +70,17 @@ UMAP / t-SNE、差异分析、富集及细胞通讯等预计算结果须由用�
 
 参考列定义：[DESeq2](https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html)、[Seurat](https://satijalab.org/seurat/reference/findallmarkers)、[enrichplot](https://github.com/YuLab-SMU/enrichplot/blob/master/R/dotplot.R)。
 
+## 右侧对话
+
+代码和图片右边是对话栏（工具栏“对话”按钮可收起），像聊天一样显示你的要求、模型的回复和它改了什么。
+
+- **发截图**：在输入框按 Ctrl/⌘+V 粘贴截图，或把图片拖进对话栏、点“图片”选择文件，一次最多 4 张。可以发参考图（“照这个样子画”）、标出问题的截图或报错截图。看图需要支持图片的模型：ChatGPT / Codex 账号或支持图片的 API；Claude、Kimi 账号桥接会提示改用这两种。
+- **报错提醒**：自己改完代码运行出错时，对话里会说明第几行、可能的原因，并保留原图和代码；点“让 AI 解释并修好”，模型会说明为什么出错并给出修改。
+- **看得到改了什么**：模型每次修改都在对话里列出改动的行（红色删除、绿色新增），可以“接受并运行”“只接受”“完整对比”或“放弃”。接受后左侧高亮改动行，Ctrl+Z 可撤销。
+
 ## 编辑代码与更新图片
 
-先上传数据或试用示例生成图像。左侧可直接编辑完整代码，点击“运行并更新图片”（或 Ctrl+Enter）后，在本机执行并刷新右侧图像。请保留 source_data.csv 输入及 PDF / PNG / SVG 导出语句。编辑框支持行号、R / Python 语法高亮、括号匹配、Tab 缩进和撤销重做。点击“查找”或按 Ctrl+F / Ctrl+H 展开查找替换，可逐处或全部替换，支持区分大小写。运行错误会显示中文原因；能确定行号时可直接跳转，R 运行错误可能仅定位到表达式开始位置，会标记“附近”。
+先上传数据或试用示例生成图像。左侧可直接编辑完整代码，点击“运行并更新图片”（或 Ctrl+Enter）后，在本机执行并刷新右侧图像。请保留 `read_source()` 和 `finish(p)`。编辑框支持行号、R / Python 语法高亮、括号匹配、Tab 缩进和撤销重做。点击“查找”或按 Ctrl+F / Ctrl+H 展开查找替换，可逐处或全部替换，支持区分大小写。运行错误会显示中文原因；能确定行号时可直接跳转，R 运行错误可能仅定位到表达式开始位置，会标记“附近”。
 
 右侧支持放大、缩小、100% 原始像素、适应窗口及全屏查看；放大后可按住图片拖动，也可用滚动条查看。图片区域支持 Ctrl+滚轮缩放，键盘 + / - 缩放、0 适应窗口。中间分隔线可拖动调整两框宽度，双击恢复均分；聚焦分隔线后可用左右箭头调整、Home 恢复均分。缩放仅影响预览，不改变导出图像。
 
@@ -96,11 +121,11 @@ ex vivo 模式读取上一级项目的 `analysis_config/exvivo_sample_exclusions
 后端 FastAPI，前端为无外部 CDN 的 HTML / CSS / JavaScript。代码位于 `agent-app/`，上传和输出保存在已加入 Git 忽略规则的 `agent-app/workspace/`。
 
 ```powershell
-..\.venv\Scripts\python.exe -m pytest test_app.py test_bio.py test_code.py test_style.py test_features.py test_workflows.py -q
+..\.venv\Scripts\python.exe -m pytest -q
 node --check static/app.js
 ```
 
-当前 78 项测试通过，覆盖真实 R / Python 渲染、扩展图型、统计与输入校验、API 适配和本机访问约束。ChatGPT / Codex、Claude 账号已完成真实模型请求验证，ChatGPT 账号还完成了界面内修改火山图标题、修改手动代码草稿并运行更新图片的完整流程；真实代码修改验证只改变了要求的标题。其余服务未提供用户凭证，未进行真实调用验证。
+当前共 205 项 Python 测试，另有 `labstyle` 的 R 测试（`Rscript -e 'testthat::test_local("../labstyle")'`）。其中 10 项检查中文标签、Times New Roman 等字体和小数字号的 PDF，需要 R 的 Cairo 设备：Windows 自带，macOS 需先装 XQuartz。ChatGPT / Codex、Claude 账号已完成真实模型请求验证，ChatGPT 账号还完成了界面内修改火山图标题、修改手动代码草稿并运行更新图片的完整流程；对话栏加入后，ChatGPT / Codex 账号又完成了报错解释与修复、贴截图修改、改写成雷达图和 AI 自由作图的完整流程。其余服务未提供用户凭证，未进行真实调用验证。
 
 
 ## 看图修改、版本对比与任务停止
@@ -122,7 +147,7 @@ node --check static/app.js
 
 PCA 生成前必须确认“行是样本，数值列是特征”。方向声明随参数保存，模型不能自行替用户勾选。基因在行的矩阵可在数据页或 PCA 设置中打开“矩阵转置预览”，选择基因标识列和样本数值列，核对前 5 行、前 7 列预览后再保存。
 
-转置只改变所选矩阵的方向，不补值、不标准化、不合并重复基因；重复/缺失标识、非数值样本列或无穷值会被拒绝。表格支持 100 MB、100,000 行、50,001 列及 10,000,000 单元格（各项同时满足）；CSV/TSV 在读入超限数据前停止，XLSX 先检查工作表尺寸。可将至多 50,000 个基因转置为特征列。转置后需核对分组与数值变换，应用不会从样本名猜测分组。
+转置只改变所选矩阵的方向，不补值、不标准化、不合并重复基因；重复/缺失标识、非数值样本列或无穷值会被拒绝。表格支持 500 MB、1,048,576 行（Excel 上限）、50,001 列及 50,000,000 单元格（各项同时满足）；CSV/TSV 在读入超限数据前停止，XLSX 先检查工作表尺寸。Excel 用 calamine 读取，第一次读入后缓存解析结果：40,000 基因 × 120 样本的 xlsx 上传约 4 秒，之后每次出图或对话读数据约 0.01 秒（原来每次约 10 秒）。可将至多 50,000 个基因转置为特征列。转置后需核对分组与数值变换，应用不会从样本名猜测分组。
 
 新副本记录原数据 ID、SHA-256、标识列及样本列；原始文件保留。后续 PCA 的输入记录和复现包包含这份来源信息。ex vivo 排除在转置后的样本选择阶段执行，再进行缩放和计算，保留 HNSCC3_LD。
 

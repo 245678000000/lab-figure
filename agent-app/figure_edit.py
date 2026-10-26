@@ -41,10 +41,12 @@ def edit_code(code, engine, chart, edits):
     code = re.sub(r'^# BEGIN AISI FIGURE EDIT\r?\n.*?^# END AISI FIGURE EDIT\r?\n', '', code, flags=re.M | re.S)
     code = re.sub(r'^ais_save_figure\(', 'save_fig(', code, flags=re.M)
     obj = 'p' if engine == 'r' else 'fig'
+    # Current scripts end with finish(p); older versions call save_fig(p, ...) directly.
+    finish = list(re.finditer(rf'^finish\(\s*{obj}\b', code, re.M))
     pattern = rf'^save_fig\(\s*{obj}\s*,'
-    matches = list(re.finditer(pattern, code, re.M))
+    matches = finish or list(re.finditer(pattern, code, re.M))
     if len(matches) != 1:
-        raise ValueError('未找到唯一的标准导出语句；请保留 save_fig(p, ...) / save_fig(fig, ...)，或直接修改代码。')
+        raise ValueError('未找到唯一的导出语句；请保留 finish(p) / finish(fig)，或直接修改代码。')
     settings = edits.model_dump()
     if engine == 'r':
         # Keep the script ASCII-safe even when the R process uses the C locale.
@@ -54,6 +56,6 @@ def edit_code(code, engine, chart, edits):
         body = f'from figure_edit_helpers import edit_figure\nedit_figure(fig, {settings!r})\n'
     block = '# BEGIN AISI FIGURE EDIT\n' + body + '# END AISI FIGURE EDIT\n'
     pos = matches[0].start()
-    if engine == 'r':
+    if engine == 'r' and not finish:
         code = code[:pos] + code[pos:].replace('save_fig(', 'ais_save_figure(', 1)
     return code[:pos] + block + code[pos:]

@@ -105,7 +105,8 @@ ais_edit_figure <- function(p, e, chart) {
 
 print.aisi_edited_grob <- function(x,...) { grid::grid.newpage(); grid::grid.draw(x); invisible(x) }
 
-ais_save_figure <- function(p,name,dir=".",size,formats=c("pdf","png","svg"),...) {
+# Runs made before finish() existed have no ais_save_figure in figure-style.R.
+if (!exists("ais_save_figure")) ais_save_figure <- function(p,name,dir=".",size,formats=c("pdf","png","svg"),...) {
   labstyle::save_fig(p,name,dir=dir,size=size,formats=setdiff(formats,"pdf"),...)
   # Newly edited Chinese labels also need the Unicode-capable PDF device.
   if("pdf" %in% formats) {
@@ -114,3 +115,15 @@ ais_save_figure <- function(p,name,dir=".",size,formats=c("pdf","png","svg"),...
     if(inherits(p,"grob")) grid::grid.draw(p) else print(p)
   }
 }
+
+# Edits can turn the plot into a grid table: apply the run's colours first and
+# keep the template's statistics, size and tables on the edited result.
+local({
+  edit <- ais_edit_figure
+  ais_edit_figure <<- function(p, e, chart) {
+    if (!inherits(p, "grob") && exists("ais_apply_colors")) p <- ais_apply_colors(p)
+    out <- edit(p, e, chart)
+    for (a in c("lab_stats", "lab_size", "lab_tables")) if (is.null(attr(out, a))) attr(out, a) <- attr(p, a)
+    out
+  }
+})

@@ -10,7 +10,7 @@ from labstyle_py.style import lab_colors, to_mpl_color
 from matplotlib.colors import to_hex
 
 LOCK = threading.RLock()
-COLOR_CHARTS = {'box','violin','rate_bar','km','pie','embedding','composition','scatter','pca','custom','paired'}
+COLOR_CHARTS = {'box','violin','rate_bar','km','pie','embedding','composition','scatter','pca','custom','paired','waterfall','swimmer','ridge','density'}
 
 
 def group_key(value):

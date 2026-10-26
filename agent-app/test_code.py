@@ -1,5 +1,6 @@
 """Editor integration: real code execution, immutable history, and draft-only model edits."""
 import json
+import re
 import time
 import zipfile
 
@@ -29,9 +30,9 @@ def test_editor_reexecutes_and_keeps_parent(engine):
     folder = core.located('runs', parent['id'])
     files = {p.name:p.read_bytes() for p in folder.iterdir() if p.is_file()}
     if engine == 'r':
-        code = parent['code'].replace('wh <- ', 'p <- p + ggplot2::labs(title="Edited code preview")\nwh <- ', 1)
+        code = parent['code'].replace('finish(p', 'p <- p + ggplot2::labs(title="Edited code preview")\nfinish(p', 1)
     else:
-        code = parent['code'].replace('save_fig(fig,', 'fig.axes[0].set_title("Edited code preview")\nsave_fig(fig,', 1)
+        code = parent['code'].replace('finish(fig', 'fig.axes[0].set_title("Edited code preview")\nfinish(fig', 1)
     revised = core.render_code(parent['id'], code)
     assert revised['parent_run_id'] == parent['id']
     assert revised['execution_mode'] == 'edited'
@@ -53,7 +54,7 @@ def test_editor_error_missing_exports_and_no_stale_stats():
     with pytest.raises(ValueError, match='未生成所需文件'):
         core.render_code(parent['id'], 'print("No exports")')
     # A hand-written script that omits stats must not inherit its parent's numbers.
-    code = parent['code'].split('s <- computed_stats')[0]
+    code = re.sub(r'^finish\(p.*$', 'save_fig(p, "figure", dir = ".", formats = c("pdf", "png", "svg"))', parent['code'], flags=re.M)
     result = core.render_code(parent['id'], code)
     assert result['stats'] == []
     assert core.read_json(core.located('runs',parent['id'])/'manifest.json')['status'] == 'complete'

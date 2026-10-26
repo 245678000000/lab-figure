@@ -20,7 +20,8 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Literal
-from bio import BIO_CATALOG, compile_bio, validate_bio
+from bio import BIO_CATALOG, validate_bio
+import scripts
 from recognition import recognize_frame
 import preferences
 import task_control
@@ -50,14 +51,18 @@ def build_bundle(folder):
             pass
     temporary = folder / ('bundle-' + uuid.uuid4().hex + '.tmp')
     try:
-        with zipfile.ZipFile(temporary, 'w', zipfile.ZIP_DEFLATED) as z:
+        # level 1: large source CSVs compress ~4x faster, the ZIP is only slightly bigger
+        with zipfile.ZipFile(temporary, 'w', zipfile.ZIP_DEFLATED, compresslevel=1) as z:
             for file in files:
                 z.write(file, file.name)
         temporary.replace(target)
     finally:
         temporary.unlink(missing_ok=True)
     return target
+# Windows bundles R under .runtime; elsewhere use the system R.
 RSCRIPT = str(REPO / ".runtime/R/bin/Rscript.exe")
+if not Path(RSCRIPT).exists():
+    RSCRIPT = shutil.which("Rscript") or "/usr/local/bin/Rscript"
 CATALOG = {
     "roc": {"name": "ROC 曲线", "fields": {"outcome": "二分类结局", "predictor": "预测指标"}, "numeric": ["predictor"]},
     "box": {"name": "箱线图", "fields": {"group": "分组", "value": "数值指标"}, "numeric": ["value"]},
@@ -106,6 +111,7 @@ class PlotSpec(BaseModel):
     subset_value: str = ""
     matrix_orientation: Literal["", "samples"] = ""
     all_numeric_features: bool = False
+    time_points: str = Field(default="12,36,60", max_length=60)
 
     @model_validator(mode="after")
     def check_export_selection(self):
@@ -133,19 +139,20 @@ def located(kind, key):
     return p
 
 
-MAX_ROWS = 100_000
+# Excel holds at most 1,048,576 rows; 50 million cells is about 400 MB of numbers in memory.
+MAX_ROWS = 1_048_576
 MAX_COLUMNS = 50_001
-MAX_CELLS = 10_000_000
-MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+MAX_CELLS = 50_000_000
+MAX_UPLOAD_BYTES = 500 * 1024 * 1024
 
 
 def check_table_size(rows, columns):
     if rows > MAX_ROWS:
-        raise ValueError('表格最多支持 100,000 行')
+        raise ValueError('表格最多支持 1,048,576 行')
     if columns > MAX_COLUMNS:
         raise ValueError('表格最多支持 50,001 列（包括标识列）')
     if rows * columns > MAX_CELLS:
-        raise ValueError('表格最多支持 10,000,000 个单元格，请先选择需要的样本或特征')
+        raise ValueError('表格最多支持 50,000,000 个单元格，请先选择需要的样本或特征')
 
 
 def _identifier_read_options(columns, string_columns):
@@ -165,19 +172,44 @@ def check_column_names(names):
 
 
 def read_table(path, sheet=None, header=1, string_columns=None):
+    """Read an uploaded table once; later calls load the parsed copy cached beside it."""
     if not 1 <= header <= 30:
         raise ValueError("表头行需在 1–30 之间")
+    cache = _parsed_copy(path, sheet, header, string_columns)
+    if cache.exists():
+        return pd.read_pickle(cache)
+    table = _parse_table(path, sheet, header, string_columns)
+    pd.to_pickle(table, cache)
+    if sheet is None and table[2]:   # later reads name the sheet explicitly
+        pd.to_pickle(table, _parsed_copy(path, table[2], header, string_columns))
+    return table
+
+
+def _parsed_copy(path, sheet, header, string_columns):
+    info = path.stat()
+    key = json.dumps([path.name, info.st_size, info.st_mtime_ns, sheet, header, sorted(string_columns or [])])
+    return path.parent / f".parsed-{hashlib.sha1(key.encode()).hexdigest()[:16]}.pkl"
+
+
+def _parse_table(path, sheet, header, string_columns):
     if path.suffix.lower() == ".xlsx":
-        with pd.ExcelFile(path) as book:
-            sheets = book.sheet_names
-            selected = sheet or sheets[0]
-            if selected not in sheets:
-                raise ValueError("工作表不存在")
-            ws = book.book[selected]
-            check_table_size(max(0, ws.max_row - header), ws.max_column)
-            check_column_names(next(ws.iter_rows(min_row=header, max_row=header, values_only=True), ()))
-            names = pd.read_excel(book, sheet_name=selected, header=header - 1, nrows=0).columns
-            d = pd.read_excel(book, sheet_name=selected, header=header - 1, **_identifier_read_options(names, string_columns))
+        # calamine (Rust) reads large workbooks about 5x faster than openpyxl
+        from python_calamine import CalamineWorkbook
+        book = CalamineWorkbook.from_path(str(path))
+        sheets = book.sheet_names
+        selected = sheet or sheets[0]
+        if selected not in sheets:
+            raise ValueError("工作表不存在")
+        ws = book.get_sheet_by_name(selected)
+        check_table_size(max(0, ws.height - header), ws.width)
+        rows = ws.to_python(nrows=header)
+        check_column_names(rows[header - 1] if len(rows) >= header else ())
+        del ws, book   # free the size-check copy before pandas parses the sheet
+        options = {}
+        if string_columns:   # identifier columns stay text (e.g. 001, NA as a sample name)
+            names = pd.read_excel(path, sheet_name=selected, header=header - 1, nrows=0, engine="calamine").columns
+            options = _identifier_read_options(names, string_columns)
+        d = pd.read_excel(path, sheet_name=selected, header=header - 1, engine="calamine", **options)
     else:
         sheets, selected = [], None
         for encoding in ["utf-8-sig", "gb18030"]:
@@ -211,8 +243,11 @@ def read_table(path, sheet=None, header=1, string_columns=None):
     return d, sheets, selected
 
 
+EXCLUSIONS = Path(os.environ.get("AISI_EXCLUSIONS") or REPO.parent / "analysis_config/exvivo_sample_exclusions.tsv")
+
+
 def exclusions():
-    source = REPO.parent / "analysis_config/exvivo_sample_exclusions.tsv"
+    source = EXCLUSIONS
     if not source.exists():
         raise ValueError("ex vivo 排除清单缺失，请恢复 analysis_config/exvivo_sample_exclusions.tsv")
     tab = pd.read_csv(source, sep="\t").fillna("")
@@ -224,6 +259,9 @@ def exclusions():
 
 
 def exclusion_mask(d):
+    # Without the lab's list nothing is flagged; ex vivo mode still requires it (exclusions() raises).
+    if not EXCLUSIONS.exists():
+        return pd.Series(False, index=d.index)
     aliases, _ = exclusions()
     mask = pd.Series(False, index=d.index)
     # Exact, case-insensitive alias matching. HNSCC3_LD is never a prefix match.
@@ -335,12 +373,16 @@ def validate_spec(d, spec, metadata=None):
         raise ValueError("第一版 Cox 模型最多选择 12 个变量")
     if spec.engine == "python" and spec.chart not in ("roc", "box", "rate_bar"):
         raise ValueError("这个模板目前只有 R 实现，请切换 R 引擎")
-    for role in CATALOG[spec.chart]["numeric"]:
-        for col in spec.columns[role] if isinstance(spec.columns[role], list) else [spec.columns[role]]:
-            if not pd.api.types.is_numeric_dtype(d[col]):
-                raise ValueError(f"{col} 应为数值列，请检查表头或数据类型")
-            if not np.isfinite(d[col].dropna()).all():
-                raise ValueError(f"{col} 包含无穷值，请先处理")
+    numeric = list(dict.fromkeys(col for role in CATALOG[spec.chart]["numeric"]
+                                 for col in (spec.columns[role] if isinstance(spec.columns[role], list) else [spec.columns[role]])))
+    if numeric:   # one vectorised pass: tens of thousands of gene columns are common
+        values = d[numeric]
+        wrong = [col for col, dtype in values.dtypes.items() if not pd.api.types.is_numeric_dtype(dtype)]
+        if wrong:
+            raise ValueError(f"{wrong[0]} 应为数值列，请检查表头或数据类型")
+        infinite = np.isinf(values.to_numpy(dtype=float)).any(axis=0)
+        if infinite.any():
+            raise ValueError(f"{numeric[int(infinite.argmax())]} 包含无穷值，请先处理")
     report = {"input_rows": len(d), "excluded_rows": 0, "missing_rows": 0, "notes": []}
     if spec.subset_column:
         if spec.subset_column not in d.columns:
@@ -362,12 +404,12 @@ def validate_spec(d, spec, metadata=None):
         report["notes"].append("按用户确认的清单在样本选择阶段排除异常样本；保留原始输入。此处没有进行 CPM/TPM 输入替换或混样归因。")
         if spec.chart == "cor_heatmap":
             raise ValueError("ex vivo 相关性分析须分别计算 SCC 和 PCC。当前单图热图入口尚未实现这套专用流程，请使用项目既有分析脚本。")
-        if spec.chart in ("volcano", "ma", "marker_dot", "lr_dot", "enrichment_dot", "enrichment_bar", "gsea", "network", "custom"):
+        if spec.chart in ("volcano", "ma", "marker_dot", "lr_dot", "enrichment_dot", "enrichment_bar", "gsea", "network", "custom", "manhattan", "qq", "oncoprint"):
             raise ValueError("此入口读取预计算结果，不能在绘图阶段重新计算其全流程统计。ex vivo 请先用排除后样本完成对应分析，再核对结果来源。")
     elif exclusion_mask(d).any():
         raise ValueError("数据含 HNSCC3 已确认异常样本。若这是 ex vivo 共培养数据，请勾选 ex vivo 选项后重试；其他分析请先澄清样本用途。")
     missing = d[used].isna().any(axis=1)
-    if spec.chart in ("paired", "paired_delta", "upset") and missing.any():
+    if spec.chart in ("paired", "paired_delta", "upset", "venn") and missing.any():
         raise ValueError("配对或集合成员数据存在缺失，请明确处理规则；不会自动删除或填补")
     if spec.chart in ("missingness", "expression_heatmap"):
         report["notes"].append("缺失单元格保留展示；未做缺失值插补。")
@@ -379,8 +421,8 @@ def validate_spec(d, spec, metadata=None):
         raise ValueError("去除缺失值及排除样本后，有效数据不足 3 行")
     if report["missing_rows"]:
         report["notes"].append(f"对本图选定变量使用共同完整样本，去除 {report['missing_rows']} 行缺失数据。")
-    if spec.chart in ("roc", "auc_bar", "rate_bar", "km", "forest"):
-        col = spec.columns["event" if spec.chart in ("km", "forest") else "outcome"]
+    if spec.chart in ("roc", "auc_bar", "rate_bar", "km", "forest", "nomogram", "calibration", "dca", "time_roc"):
+        col = spec.columns["event" if spec.chart in ("km", "forest", "time_roc") else "outcome"]
         vals = list(d[col].unique())
         if len(vals) != 2:
             raise ValueError(f"{col} 需恰好包含两类，当前有 {len(vals)} 类")
@@ -408,134 +450,23 @@ def validate_spec(d, spec, metadata=None):
     return d, report
 
 
-def rstr(value):
-    # JSON strings are valid R strings; encoding also prevents code interpolation.
-    return json.dumps(str(value), ensure_ascii=False)
-
-
-def rvec(values):
-    return "c(" + ", ".join(rstr(x) for x in values) + ")"
-
-
 def compile_r(spec, default_size=None):
-    if spec.chart in BIO_CATALOG:
-        return compile_bio(spec, default_size)
-    c = spec.columns
-    q = lambda role: rstr(c[role])
-    n = "TRUE" if spec.show_n else "FALSE"
-    positive = rstr(spec.positive)
-    comparisons = "NULL" if spec.comparisons == "default" else rstr(spec.comparisons)
-    common = f", show_n = {n}"
-    if spec.chart == "roc":
-        call = f"lab_roc(d, outcome = {q('outcome')}, predictor = {q('predictor')}, positive = {positive}, direction = {rstr(spec.direction)}{common})"
-    elif spec.chart in ("box", "violin"):
-        call = f"lab_{spec.chart}(d, x = {q('group')}, y = {q('value')}, comparisons = {comparisons}{common})"
-    elif spec.chart == "rate_bar":
-        call = f"lab_rate_bar(d, group = {q('group')}, outcome = {q('outcome')}, positive = {positive}, show_counts = {n})"
-    elif spec.chart == "km":
-        extra = (f", xlab = {rstr(spec.x_label)}" if spec.x_label else "") + (f", ylab = {rstr(spec.y_label)}" if spec.y_label else "")
-        call = f"lab_km(d, time = {q('time')}, event = {q('event')}, group = {q('group')}, event_value = {positive}{common}{extra})"
-    elif spec.chart == "forest":
-        extra = f", xlab = {rstr(spec.x_label)}" if spec.x_label else ""
-        call = f"lab_forest(lab_cox_table(d, time = {q('time')}, event = {q('event')}, terms = {rvec(c['predictors'])}, event_value = {positive}){extra})"
-    elif spec.chart == "auc_bar":
-        call = f"lab_auc_bar(lab_auc_table(d, outcome = {q('outcome')}, predictors = {rvec(c['predictors'])}, positive = {positive}, direction = {rstr(spec.direction)}))"
-    elif spec.chart == "cor_heatmap":
-        call = f"lab_cor_heatmap(d, vars = {rvec(c['predictors'])}, method = {rstr(spec.method)}, cluster = FALSE, show_values = TRUE)"
-    else:
-        call = f"lab_pie(d, category = {q('group')})"
-    labels = []
-    for key, value in [("title", spec.title), ("x", spec.x_label), ("y", spec.y_label)]:
-        if value:
-            labels.append(f"{key} = {rstr(value)}")
-    additions = ""
-    if labels:
-        if spec.chart in ("forest", "km"):
-            if spec.title:
-                additions = f"\np <- p + patchwork::plot_annotation(title = {rstr(spec.title)})"
-        else:
-            additions = "\np <- p + ggplot2::labs(" + ", ".join(labels) + ")"
-    size = "attr(p, 'lab_size')" if spec.size == "template" else rstr(spec.size)
-    if default_size:
-        size = f'c({default_size[0]}, {default_size[1]})'
-    return f'''# Generated by AISI-figure. Run from this directory with Rscript figure.R
-# source_data.csv is the exact analyzed subset; see manifest.json for exclusions and missingness.
-# ---- data ----
-library(labstyle)
-source("figure-style.R")
-d <- if(file.exists("source-schema.json")) {{ source("wide-table.R"); ais_read_wide() }} else read.csv("source_data.csv", check.names = FALSE, encoding = "UTF-8", stringsAsFactors = FALSE)
-set.seed(42)
-# ---- plot ----
-p <- {call}
-computed_stats <- lab_stats(p)
-p <- ais_apply_colors(p)
-{additions}
-wh <- {size}
-if (is.null(wh)) wh <- "single"
-if (is.character(wh)) wh <- lab_sizes()[[wh]]
-wh <- ais_export_size(wh)
-ais_write_style(wh)
-save_fig(p, "figure", dir = ".", size = wh, formats = c("pdf", "png", "svg"))
-# For Unicode labels, Cairo embeds fonts and uses Windows font fallback.
-label_text <- c(names(d), unlist(d[vapply(d, is.character, logical(1))]), {rstr(spec.title)}, {rstr(spec.x_label)}, {rstr(spec.y_label)})
-if (any(grepl("[^ -~]", label_text, perl = TRUE))) {{
-  grDevices::cairo_pdf("figure.pdf", width = wh[1], height = wh[2], family = "Arial")
-  print(p)
-  grDevices::dev.off()
-}}
-s <- computed_stats
-jsonlite::write_json(s, "stats.json", dataframe = "rows", auto_unbox = TRUE, na = "null", pretty = TRUE, digits = NA)
-if (!is.null(s)) write.csv(s, "statistics.csv", row.names = FALSE)
-writeLines(capture.output(sessionInfo()), "session-info.txt")
-'''
+    return scripts.r_script(spec, default_size)
 
 
 def compile_python(spec, default_size=None):
-    c = spec.columns
-    n = str(spec.show_n)
-    if spec.chart == "roc":
-        call = f"lab_roc(d, outcome={c['outcome']!r}, predictor={c['predictor']!r}, positive={spec.positive!r}, direction={spec.direction!r}, show_n={n})"
-    elif spec.chart == "box":
-        cmp = None if spec.comparisons == "default" else spec.comparisons
-        call = f"lab_box(d, x={c['group']!r}, y={c['value']!r}, comparisons={cmp!r}, show_n={n})"
-    else:
-        call = f"lab_rate_bar(d, group={c['group']!r}, outcome={c['outcome']!r}, positive={spec.positive!r}, show_counts={n})"
-    mods = ""
-    for key, value in [("title", spec.title), ("xlabel", spec.x_label), ("ylabel", spec.y_label)]:
-        if value:
-            mods += f"\nfig.axes[0].set_{key}({value!r})"
-    size = "None" if spec.size == "template" else repr(spec.size)
-    if default_size:
-        size = repr(tuple(default_size))
-    return f'''# Generated by AISI-figure. Run from this directory with Python.
-# ---- data ----
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import pandas as pd
-from labstyle_py import lab_roc, lab_box, lab_rate_bar, save_fig, lab_stats
-from figure_style import configure_colors, export_size, write_style
-plt.rcParams["font.sans-serif"] = ["Arial", "Microsoft YaHei", "DejaVu Sans"]
-d = pd.read_csv("source_data.csv")
-configure_colors(d)
-# ---- plot ----
-fig = {call}{mods}
-wh = export_size({size}, fig)
-write_style(wh)
-save_fig(fig, "figure", dir=".", size=wh, formats=("pdf", "png", "svg"))
-s = lab_stats(fig)
-if s is not None:
-    s.to_json("stats.json", orient="records", force_ascii=False, double_precision=15)
-    s.to_csv("statistics.csv", index=False)
-import importlib.metadata
-from pathlib import Path
-Path("session-info.txt").write_text("\\n".join(f"{{package}}=={{importlib.metadata.version(package)}}" for package in ["labstyle-py", "pandas", "numpy", "scipy", "scikit-learn", "matplotlib"]), encoding="utf-8")
-'''
+    return scripts.py_script(spec, default_size)
+
+
+# Windows R reads scripts as UTF-8 under the C locale; elsewhere R needs a UTF-8
+# locale for Chinese text, while C sorting keeps group order the same everywhere.
+LOCALE = {"LC_ALL": "C"} if os.name == "nt" else {"LANG": "en_US.UTF-8", "LC_CTYPE": "en_US.UTF-8", "LC_COLLATE": "C"}
 
 
 def run_process(command, cwd, timeout=120):
+    env = {k: v for k, v in os.environ.items() if k != "LC_ALL"}
     result = task_control.run(command, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
-                            env={**os.environ, "PYTHONUTF8": "1", "LC_ALL": "C"},
+                            env={**env, "PYTHONUTF8": "1", **LOCALE},
                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
     return result.returncode, result.stdout + result.stderr
 
@@ -612,7 +543,10 @@ def default_figure_size(data, spec):
     return list(sizes[spec.chart]) if spec.chart in sizes else None
 
 
-def render(dataset_id, spec):
+def render(dataset_id, spec, code=None):
+    """Template run; for chart "free" the script comes from the model (`code`)."""
+    if spec.chart == "free" and not code:
+        raise ValueError("AI 自由作图需要先连接模型，并在对话里描述想要的图")
     task_control.stage('检查数据与样本选择', 'inspect')
     d, metadata = load_dataset(dataset_id)
     resolved = resolve_features(d, spec, metadata)
@@ -648,7 +582,8 @@ def render(dataset_id, spec):
     write_json(folder / "analysis-settings.json", resolved.model_dump())
     d.to_csv(folder / "source_data.csv", index=False, encoding="utf-8")
     filename = "figure.R" if spec.engine == "r" else "figure.py"
-    code = compile_r(spec, plot_settings['default_size_in']) if spec.engine == "r" else compile_python(spec, plot_settings['default_size_in'])
+    if not code:
+        code = compile_r(spec, plot_settings['default_size_in']) if spec.engine == "r" else compile_python(spec, plot_settings['default_size_in'])
     if spec.engine == "r":
         shutil.copyfile(ROOT / "figure-style.R", folder / "figure-style.R")
     else:
@@ -696,6 +631,24 @@ def render_code(parent_id, code, figure_edits=None):
     return execute_render(folder, manifest, code, filename)
 
 
+_labstyle_checked = False
+
+
+def ensure_labstyle():
+    """Install the repo's labstyle when the installed one is older (new templates)."""
+    global _labstyle_checked
+    if _labstyle_checked:
+        return
+    wanted = re.search(r"^Version:\s*(\S+)", (REPO / "labstyle/DESCRIPTION").read_text(encoding="utf-8"), re.M)[1]
+    rc, installed = run_process([RSCRIPT, "--vanilla", "-e", 'cat(tryCatch(as.character(packageVersion("labstyle")), error = function(e) "0"))'], REPO, 60)
+    if rc or installed.strip().splitlines()[-1:] != [wanted]:
+        task_control.stage("更新实验室作图包 labstyle", "render")
+        rc, log = run_process([RSCRIPT, "--vanilla", "-e", f'install.packages({json.dumps(str(REPO / "labstyle"))}, repos = NULL, type = "source")'], REPO, 300)
+        if rc:
+            raise ValueError("labstyle 安装失败：" + log[-1500:])
+    _labstyle_checked = True
+
+
 def pdf_page_mm(path):
     """Read the page box, including Cairo's compressed object streams."""
     import importlib.util
@@ -717,6 +670,8 @@ def pdf_page_mm(path):
 
 def execute_render(folder, manifest, code, filename):
     spec = PlotSpec.model_validate(manifest["spec"])
+    if spec.engine == "r":
+        ensure_labstyle()
     command = [RSCRIPT, "--vanilla", filename] if spec.engine == "r" else [sys.executable, "-B", filename]
     if manifest.get("execution_mode") == "edited" and spec.engine == "r":
         (folder / "runner.R").write_text(R_EDITOR_RUNNER, encoding="utf-8", newline="")

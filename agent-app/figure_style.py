@@ -1,8 +1,17 @@
-"""Frozen export and colour settings for standalone Python reproduction."""
+"""Frozen export and colour settings for standalone Python reproduction.
+
+A figure script needs only: d = read_source(); fig = <a labstyle_py template>; finish(fig).
+"""
 import json
 from pathlib import Path
 import numbers
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import pandas as pd
 from labstyle_py.style import resolve_size
+
+plt.rcParams["font.sans-serif"] = ["Arial", "Microsoft YaHei", "DejaVu Sans"]
 
 SETTINGS=json.loads(Path('plot-settings.json').read_text(encoding='utf-8')) if Path('plot-settings.json').exists() else {}
 
@@ -32,3 +41,26 @@ def write_style(wh):
     from labstyle_py.style import BASE_SIZE,DPI,TEXT_MM,lab_colors
     info={'name':'AISI-figure','reference':'Original nine labstyle templates','version':'1','base_size_pt':BASE_SIZE,'axis_text_pt':BASE_SIZE*.8,'axis_title_pt':BASE_SIZE,'legend_text_pt':BASE_SIZE*.8,'annotation_mm':TEXT_MM['small'],'colors':lab_colors('binary'),'width_in':wh[0],'height_in':wh[1],'dpi':DPI}
     Path('figure-style.json').write_text(json.dumps(info,ensure_ascii=False,indent=2),encoding='utf-8')
+
+
+def read_source():
+    """This run's input table, with the run's group colours applied to the templates."""
+    data = pd.read_csv("source_data.csv")
+    configure_colors(data)
+    return data
+
+
+def finish(fig, size=None):
+    """Save figure.pdf/png/svg plus the statistics and versions the app reads."""
+    import importlib.metadata
+    from labstyle_py import lab_stats, save_fig
+    wh = export_size(size, fig)
+    write_style(wh)
+    save_fig(fig, "figure", dir=".", size=wh, formats=("pdf", "png", "svg"))
+    s = lab_stats(fig)
+    if s is not None:
+        s.to_json("stats.json", orient="records", force_ascii=False, double_precision=15)
+        s.to_csv("statistics.csv", index=False)
+    packages = ["labstyle-py", "pandas", "numpy", "scipy", "scikit-learn", "matplotlib"]
+    Path("session-info.txt").write_text("\n".join(f"{p}=={importlib.metadata.version(p)}" for p in packages), encoding="utf-8")
+    return fig

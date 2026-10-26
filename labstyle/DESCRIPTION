@@ -1,10 +1,11 @@
 Package: labstyle
 Title: Lab Figure Style and Plot Templates
-Version: 0.2.0
+Version: 0.3.0
 Description: House plotting style (theme, palettes, size presets, export) and
     parameterised plot templates (ROC, Kaplan-Meier, forest, box, violin,
     rate bar, AUC bar, correlation heatmap, pie) distilled from the lab's
-    published analysis code.
+    published analysis code, plus omics, clinical, prediction-model,
+    distribution and GWAS templates.
 License: GPL-3
 Encoding: UTF-8
 Depends:
@@ -22,5 +23,6 @@ Imports:
     svglite,
     utils
 Suggests:
+    ggrepel,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3

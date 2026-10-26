@@ -60,8 +60,9 @@ def test_resource_limits_and_wide_table_preview(tmp_path):
     assert data.shape==(3,400)
     assert len(core.summarize(data)['preview'][0])<=24
     core.check_table_size(100,50001)
+    core.check_table_size(1000,50000)                 # 50 million cells is the limit
     with pytest.raises(ValueError,match='单元格'):
-        core.check_table_size(1000,50000)
+        core.check_table_size(1001,50000)
     with pytest.raises(ValueError,match='列'):
         core.check_table_size(2,50002)
 
@@ -92,7 +93,7 @@ def test_explicit_large_feature_selection_stays_compact_and_reproducible():
     agent.preserve_features(proposed,spec)
     assert proposed.columns['predictors']==spec.columns['predictors']
     result=core.render(meta['id'],spec)
-    assert 'analysis-settings.json' in result['code']
+    assert 'read_features()' in result['code']
     folder=core.located('runs',result['id'])
     with zipfile.ZipFile(folder/'reproduce.zip') as z:
         assert len(json.loads(z.read('analysis-settings.json'))['columns']['predictors'])==350

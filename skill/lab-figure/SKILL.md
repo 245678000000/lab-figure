@@ -4,8 +4,10 @@ description: >-
   Make this lab's data figures from a table (csv/xlsx) in the lab's house style:
   ROC/AUC, Kaplan-Meier survival with risk table, Cox forest plot, box or violin
   with Wilcoxon p, response-rate bars with OR, AUC comparison bars, correlation
-  heatmap, composition pie. Use for 实验室作图、按导师风格画图、ROC/KM/森林图/箱线图
-  from data. Not for schematics, mechanism diagrams or graphical abstracts
+  heatmap, composition pie, waterfall, swimmer, OncoPrint, nomogram, calibration,
+  DCA, time-dependent ROC, ridgeline, Sankey, Venn, Manhattan/QQ, volcano, PCA,
+  UMAP and enrichment plots. Use for 实验室作图、按导师风格画图、ROC/KM/森林图/
+  箱线图/瀑布图/列线图/火山图 from data. Not for schematics, mechanism diagrams or graphical abstracts
   (use nature-figure for those).
 ---
 

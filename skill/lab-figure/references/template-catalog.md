@@ -118,6 +118,30 @@ lab_pie(summary_df, category = "type", count = "n")
 ```
 Stats: category, count. Size: pie.
 
+## More templates (labstyle 0.3)
+
+Same contract as above: data frame + column names, returns a plot with `lab_stats()` and a size
+preset. No gallery thumbnails yet; render one with the call shown to see it.
+
+| Group | Call | Notes |
+|---|---|---|
+| Clinical | `lab_waterfall(d, id = "patient", value = "best_change", group = "best_response")` | sorted bars, RECIST +20% / -30% lines |
+| | `lab_swimmer(d, id = "patient", time = "months", group = "arm", ongoing = "on_treatment")` | arrow = still on treatment |
+| | `lab_oncoprint(mut, sample = "sample", gene = "gene", alteration = "type")` | long mutation table, top 20 genes |
+| Prediction models | `lab_nomogram(d, c("score", "age", "stage"), outcome = "response", positive = "R")` | logistic; Cox with `time`, `event`, `times` |
+| | `lab_calibration(d, outcome = "response", predicted = "prob", positive = "R")` | Brier, slope, intercept, Hosmer-Lemeshow |
+| | `lab_dca(d, outcome = "response", predictors = c("model_a", "model_b"), positive = "R")` | net benefit vs treat all / none |
+| | `lab_time_roc(d, time = "OS months", event = "OS status", predictor = "score", times = c(12, 36, 60))` | IPCW, matches timeROC |
+| Distribution and flow | `lab_ridge(d, group = "cell_type", value = "signature")`, `lab_density(d, "score", group = "arm")` | |
+| | `lab_sankey(d, stages = c("baseline", "week12", "week24"))` | 2-4 stage columns, optional `count` |
+| | `lab_venn(d, sets = c("set_A", "set_B", "set_C"))` | 0/1 membership columns, 2-4 sets |
+| GWAS | `lab_manhattan(gw, chr = "CHR", pos = "BP", p = "P", label = "SNP")`, `lab_qq(gw, p = "P")` | 5e-8 / 1e-5 lines, lambda_gc |
+| Omics (from AISI-figure) | `lab_volcano(de, label = "gene", effect = "log2FC", padj = "padj")`, `lab_ma(...)` | finished DE tables only |
+| | `lab_expression_heatmap(m, label = "gene", features = samples, scaling = "row_z")`, `lab_sample_distance(...)`, `lab_pca(...)` | |
+| | `lab_embedding(d, x = "UMAP_1", y = "UMAP_2", group = "cluster")`, `lab_feature(...)`, `lab_marker_dot(...)`, `lab_composition(...)`, `lab_lr_dot(...)` | existing coordinates / results |
+| | `lab_enrichment_dot(...)`, `lab_enrichment_bar(...)`, `lab_gsea(...)` | existing enrichment results |
+| | `lab_paired(d, pair = "patient", group = "time", value = "x", reference = "pre")`, `lab_paired_delta(...)`, `lab_scatter(...)`, `lab_histogram(...)`, `lab_missingness(...)`, `lab_upset(...)`, `lab_network(...)`, `lab_custom(...)` | |
+
 ## Python (labstyle_py)
 
 Same arguments, house style, size presets and statistics as the R templates

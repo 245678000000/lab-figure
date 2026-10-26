@@ -68,7 +68,7 @@ test('transport failure retains job id for completed-result recovery after refre
  const {ctx}=harness(),saved=new Map();ctx.S.busy=false;ctx.S.result={id:'parent'};
  ctx.sessionStorage={setItem:(k,v)=>saved.set(k,v),removeItem:k=>saved.delete(k)};
  ctx.workflowUI={hasPending:()=>false,jobEnd(){}};ctx.editorUI={clearError(){},showError(){}};
- ctx.busy=()=>{};ctx.toast=()=>{};ctx.$('codeEditor').value='plot(1)';
+ ctx.busy=()=>{};ctx.toast=()=>{};ctx.showRunError=()=>{};ctx.$('codeEditor').value='plot(1)';
  ctx.api=async()=>({job_id:'job123'});ctx.waitJob=async()=>{throw Error('network disconnected')};
  vm.runInContext(app.split('\n').find(s=>s.startsWith('async function runEditor(')),ctx);
  await ctx.runEditor();assert.equal(saved.get('labfigure.job'),'job123');
